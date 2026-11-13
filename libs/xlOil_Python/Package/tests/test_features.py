@@ -985,3 +985,12 @@ def test_setup_keeps_user_modules(ini_copy, monkeypatch, capsys):
     assert "mytools" in mods and mods[-1] == "mytools"
     assert "xloil.xlam_ribbon" in mods and "xloil.xloil_ribbon" not in mods
     assert captured["ribbon"] == "xlam"
+
+
+def test_load_modules_ignores_comments(ini_copy):
+    """ The default ini's comments mention xloil.xloil_ribbon: doctor must only look at
+        the LoadModules value, or it reports the COM ribbon after `xloil ribbon xlam` """
+    from xloil import command_line as cl
+    assert "xloil.xloil_ribbon" in ini_copy.read_text(encoding="utf-8").split("LoadModules=")[0]
+    cl.config_set("xlOil_Python.LoadModules", '["xloil.xlam_ribbon", "mytools"]', ini=str(ini_copy))
+    assert cl._load_modules(str(ini_copy)) == ["xloil.xlam_ribbon", "mytools"]

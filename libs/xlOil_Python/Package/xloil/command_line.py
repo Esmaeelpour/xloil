@@ -627,15 +627,20 @@ _RIBBON_MODULES = {"com": "xloil.xloil_ribbon", "xlam": "xloil.xlam_ribbon"}
 XLAM_NAME = "xlOil.xlam"
 
 
+def _load_modules(ini=None) -> list:
+    """ The LoadModules list in the settings file (parsed, so comments that mention
+        module names don't count); empty if it can't be read """
+    try:
+        _, doc = _load_ini(ini)
+        return [str(m) for m in doc["xlOil_Python"]["LoadModules"]]
+    except Exception:
+        return []
+
+
 def _user_modules(ini=None) -> list:
     """ Your own modules in LoadModules (anything not part of xlOil), so that
         re-running setup keeps them """
-    try:
-        _, doc = _load_ini(ini)
-        mods = [str(m) for m in doc["xlOil_Python"]["LoadModules"]]
-    except Exception:
-        return []
-    return [m for m in mods if m != "xloil" and not m.startswith("xloil.")]
+    return [m for m in _load_modules(ini) if m != "xloil" and not m.startswith("xloil.")]
 
 
 def _xlam_source() -> Path:
@@ -953,16 +958,19 @@ def doctor():
                     f"Run `xloil config python \"{configured}\"` to add it")
             elif needed:
                 ok(f"Conda PYTHONHOME set")
+        mods = _load_modules(ini)   # not `text`: the ini's comments mention module names too
         signed_only = addins_must_be_signed()
         xlam_installed = (_XL_START_PATH / XLAM_NAME).exists()
-        if "xloil.xloil_ribbon" in text and signed_only:
+        if _RIBBON_MODULES["com"] in mods and signed_only:
             bad("Office policy requires signed add-ins, so the COM ribbon can't load "
                 "(you'd see a 'COM addin connect' error)", "Run `xloil ribbon xlam`")
-        elif "xloil.xlam_ribbon" in text and not xlam_installed:
+        elif _RIBBON_MODULES["xlam"] in mods and not xlam_installed:
             bad("LoadModules has xloil.xlam_ribbon but xlOil.xlam isn't in XLSTART",
                 "Run `xloil ribbon xlam`")
-        elif "xloil.xlam_ribbon" in text:
+        elif _RIBBON_MODULES["xlam"] in mods:
             ok("Ribbon: xlOil.xlam")
+        elif _RIBBON_MODULES["com"] in mods:
+            ok("Ribbon: COM add-in")
     else:
         warn(f"No settings file at {ini}: run `xloil install`")
 
