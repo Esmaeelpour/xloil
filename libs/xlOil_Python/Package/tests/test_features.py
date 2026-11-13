@@ -862,7 +862,10 @@ def test_xlam_ribbon_xml_tags_have_callbacks(xlam_ribbon):
     assert not missing
 
 
-def test_ribbon_command_switches_modules(tmp_path, monkeypatch, xlam_ribbon):
+def test_ribbon_command_switches_modules(tmp_path, monkeypatch):
+    # Runs outside Excel, so it must not import the Excel-only ribbon modules
+    for mod in ("xloil.ribbon_core", "xloil.xlam_ribbon", "xloil.xloil_ribbon"):
+        monkeypatch.setitem(sys.modules, mod, None)
     from xloil import command_line as cl
     ini = tmp_path / "xlOil.ini"
     ini.write_text('[xlOil_Python]\nLoadModules = ["xloil.xloil_ribbon", "mymod"]\n', encoding="utf-8")
@@ -871,7 +874,7 @@ def test_ribbon_command_switches_modules(tmp_path, monkeypatch, xlam_ribbon):
     monkeypatch.setattr(cl, "_unblock", lambda p: None)
     fake = tmp_path / "xlOil.xlam"
     fake.write_bytes(b"PK")
-    monkeypatch.setattr(xlam_ribbon, "xlam_path", lambda: fake)
+    monkeypatch.setattr(cl, "_xlam_source", lambda: fake)
     cl.ribbon("xlam", ini=str(ini))
     assert (xlstart / "xlOil.xlam").exists()
     text = ini.read_text()
@@ -917,6 +920,11 @@ def test_vba_project_is_readable_compound_file():
             "VBA/ThisWorkbook", "VBA/Sheet1"} <= streams
     src = v.decompress(ole.openstream("VBA/M1").read())
     assert src.startswith(b'Attribute VB_Name = "M1"') and b"Sub A()" in src
+
+
+def test_packaged_xlam_found_by_cli():
+    from xloil import command_line as cl
+    assert cl._xlam_source().exists()
 
 
 def test_committed_xlam_is_up_to_date():
