@@ -85,6 +85,7 @@ setup(
     
     distclass=BinaryDistribution,
     packages=find_packages(),
+    package_data={'xloil': ['data/*.xlam']},
     data_files=[('share/xloil', data_files)],
     entry_points = {
         'console_scripts': ['xloil=xloil.command_line:main'],

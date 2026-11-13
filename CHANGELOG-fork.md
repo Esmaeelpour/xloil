@@ -4,6 +4,20 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post4
+
+The *xlOil Py* ribbon tab now works on computers whose Office policy requires signed
+add-ins. The compiled add-in files are unchanged (still v0.22.1.post1's).
+
+- New `xlOil.xlam` ribbon: the same tab, drawn by an ordinary workbook add-in in
+  XLSTART, for computers where the policy blocks the unsigned COM add-in.
+- New command `xloil ribbon xlam|com|off` switches between the two ribbons, or turns
+  the tab off.
+- `xloil setup` detects the policy and picks the `.xlam` ribbon. `xloil doctor` reports
+  a ribbon that can't load and says how to fix it.
+- `xloil install` says to close Excel when Excel is holding the add-in file, instead
+  of showing a `PermissionError` traceback.
+
 ## 0.22.1.post3
 
 Command-line and installer fixes found setting up a locked-down work laptop. The
