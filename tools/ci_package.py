@@ -1,6 +1,6 @@
 """
-    Packages a Release x64 build into distributables, for CI (GitHub Actions /
-    CircleCI). A lighter alternative to stage.py which also builds Win32 and the
+    Packages a Release x64 build into distributables, for CI (GitHub Actions).
+    A lighter alternative to stage.py, which also builds Win32 and the
     Sphinx/Doxygen docs.
 
     Usage (from the repository root, after `msbuild xlOil.sln /p:Configuration=Release /p:Platform=x64`):

@@ -3,8 +3,6 @@ name: Build and release
 # Builds the xlOil add-in (Release x64), one Python wheel per supported Python
 # version and the pure-Python xloil-stubs wheel, runs the tests, and on a
 # version tag (v*) publishes everything as a GitHub Release.
-#
-# CircleCI (.circleci/config.yml) runs the same build as a fallback.
 
 on:
   push:
