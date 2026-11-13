@@ -52,7 +52,7 @@ command prompt *in the Python environment you want Excel to use*:
 
 .. code-block:: bat
 
-    pip install xloil-0.22.1.post3-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post4-cp312-cp312-win_amd64.whl
     xloil setup
 
 ``xloil setup`` is the guided set-up. ``--features pandas,polars,charts,qt,intellisense,cache``
@@ -81,6 +81,26 @@ The *xlOil Py* ribbon tab holds the common settings, so you rarely need to edit
 Changes to the environment, and turning features off, take effect after
 restarting Excel (the ribbon shows *Restart Required*).
 
+Computers that require signed add-ins
+-------------------------------------
+
+Some organisations set the Office policy *Require application add-ins to be signed
+by Trusted Publisher*. It blocks the unsigned COM add-in that draws the *xlOil Py*
+tab (Excel's log shows a *COM addin connect* error), although xlOil's functions
+still work. On these computers xlOil draws the same tab from ``xlOil.xlam``, an
+ordinary workbook add-in in your XLSTART folder, which the policy doesn't block.
+
+``xloil setup`` detects the policy and chooses the ``.xlam`` ribbon for you. To
+switch by hand (with Excel closed)::
+
+    xloil ribbon xlam    # the .xlam ribbon
+    xloil ribbon com     # back to the built-in COM ribbon
+    xloil ribbon off     # no ribbon tab
+
+``xloil doctor`` reports when the chosen ribbon can't load. If a ribbon button
+says *xlOil isn't loaded*, check that ``xlOil.xll`` is in XLSTART and that
+``xloil.xlam_ribbon`` is in ``LoadModules``.
+
 What ``xloil install`` does
 ---------------------------
 
@@ -97,7 +117,7 @@ Optional extras install the libraries for particular features:
 
 .. code-block:: bat
 
-    pip install "xloil-0.22.1.post3-cp312-cp312-win_amd64.whl[all]"      :: everything below
+    pip install "xloil-0.22.1.post4-cp312-cp312-win_amd64.whl[all]"      :: everything below
     pip install "xloil-...whl[pandas]"      :: DataFrames
     pip install "xloil-...whl[polars]"      :: polars
     pip install "xloil-...whl[plotting]"    :: matplotlib, plotly, Qt WebEngine charts
@@ -114,7 +134,7 @@ environment*:
 
     conda create -n xl python=3.12 pandas
     conda activate xl
-    pip install xloil-0.22.1.post3-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post4-cp312-cp312-win_amd64.whl
     xloil install
 
 Unlike python.org installs, an embedded conda interpreter cannot find its

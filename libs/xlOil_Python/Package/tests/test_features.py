@@ -802,3 +802,130 @@ def test_config_add_remove_module(ini_copy):
     cl.config_remove_module("xloil.xloil_ribbon", ini=str(ini_copy))
     mods = list(tomlkit.parse(ini_copy.read_text(encoding="utf-8"))["xlOil_Python"]["LoadModules"])
     assert mods == ["xloil.gui.qtpy", "mytools"]
+
+
+# --- xlam ribbon --------------------------------------------------------------
+
+@pytest.fixture
+def xlam_ribbon(monkeypatch):
+    """ xlam_ribbon with ribbon_core replaced: the real one reads Excel's settings on import """
+    import types
+    import xloil
+
+    class FakeCore(types.ModuleType):
+        def __getattr__(self, name):
+            fn = lambda ctrl, *args: (name, ctrl.tag, *args)
+            setattr(self, name, fn)
+            return fn
+
+    fake = FakeCore("xloil.ribbon_core")
+    monkeypatch.setitem(sys.modules, "xloil.ribbon_core", fake)
+    monkeypatch.setattr(xloil, "ribbon_core", fake, raising=False)
+    monkeypatch.delitem(sys.modules, "xloil.xlam_ribbon", raising=False)
+    import xloil.xlam_ribbon as mod
+    yield mod
+    sys.modules.pop("xloil.xlam_ribbon", None)
+
+
+def test_xlam_bridge_dispatch(xlam_ribbon):
+    assert xlam_ribbon.xloRibbonCall("text", "loadmodules") == ("get_load_modules", "loadmodules")
+    assert xlam_ribbon.xloRibbonCall("select", "loglevel", "id3", 3.0) == ("set_log_level", "loglevel", "id3", 3)
+    assert xlam_ribbon.xloRibbonCall("toggle", "feature:pandas", True) == ("set_feature", "pandas", True)
+    # Unknown callbacks are refused (logged), not executed
+    assert xlam_ribbon.xloRibbonCall("action", "nope") is None
+
+
+def test_xlam_bridge_runs_coroutines(xlam_ribbon):
+    import asyncio
+
+    async def coro(ctrl, value):
+        await asyncio.sleep(0)
+        return value * 2
+    xlam_ribbon._CALLBACKS[("change", "_test")] = coro
+    try:
+        assert xlam_ribbon.call("change", "_test", 21) == 42
+    finally:
+        del xlam_ribbon._CALLBACKS[("change", "_test")]
+
+
+def test_xlam_ribbon_xml_tags_have_callbacks(xlam_ribbon):
+    import re
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "tools"))
+    import build_xlam
+    xml = build_xlam.ribbon_xml()
+    from xml.dom.minidom import parseString
+    parseString(xml)
+    tags = set(re.findall(r'tag="([^"]+)"', xml))
+    known = {t for _, t in xlam_ribbon._CALLBACKS}
+    missing = [t for t in tags if not t.startswith("feature:") and t not in known]
+    assert not missing
+
+
+def test_ribbon_command_switches_modules(tmp_path, monkeypatch, xlam_ribbon):
+    from xloil import command_line as cl
+    ini = tmp_path / "xlOil.ini"
+    ini.write_text('[xlOil_Python]\nLoadModules = ["xloil.xloil_ribbon", "mymod"]\n', encoding="utf-8")
+    xlstart = tmp_path / "XLSTART"
+    monkeypatch.setattr(cl, "_XL_START_PATH", xlstart)
+    monkeypatch.setattr(cl, "_unblock", lambda p: None)
+    fake = tmp_path / "xlOil.xlam"
+    fake.write_bytes(b"PK")
+    monkeypatch.setattr(xlam_ribbon, "xlam_path", lambda: fake)
+    cl.ribbon("xlam", ini=str(ini))
+    assert (xlstart / "xlOil.xlam").exists()
+    text = ini.read_text()
+    assert "xloil.xlam_ribbon" in text and "xloil.xloil_ribbon" not in text and "mymod" in text
+    cl.ribbon("off", ini=str(ini))
+    assert not (xlstart / "xlOil.xlam").exists()
+    assert "ribbon" not in ini.read_text()
+
+
+# --- vbaProject.bin writer (tools/vba_project.py) -----------------------------
+
+def _tools():
+    from pathlib import Path
+    tools = str(Path(__file__).resolve().parents[4] / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+
+
+def test_vba_compression_round_trip():
+    _tools()
+    import vba_project as v
+    for data in [b"", b"a", b"abc" * 3000, bytes(range(256)) * 20,
+                 "Sub X()\r\n    MsgBox \"hi\"\r\nEnd Sub\r\n".encode() * 200]:
+        assert v.decompress(v.compress(data)) == data
+
+
+def test_vba_project_encryption_round_trip():
+    _tools()
+    import vba_project as v
+    for seed in (0x07, 0x0B, 0x0D, 0x00):
+        assert v._decrypt(v._encrypt("{A1B2}", b"\x00\xff\x10", seed)) == b"\x00\xff\x10"
+
+
+def test_vba_project_is_readable_compound_file():
+    olefile = pytest.importorskip("olefile")
+    import io
+    _tools()
+    import vba_project as v
+    data = v.build_vba_project({"M1": "Sub A()\r\nEnd Sub\r\n"})
+    ole = olefile.OleFileIO(io.BytesIO(data))
+    streams = {"/".join(s) for s in ole.listdir()}
+    assert {"PROJECT", "PROJECTwm", "VBA/dir", "VBA/_VBA_PROJECT", "VBA/M1",
+            "VBA/ThisWorkbook", "VBA/Sheet1"} <= streams
+    src = v.decompress(ole.openstream("VBA/M1").read())
+    assert src.startswith(b'Attribute VB_Name = "M1"') and b"Sub A()" in src
+
+
+def test_committed_xlam_is_up_to_date():
+    import zipfile
+    from pathlib import Path
+    _tools()
+    import build_xlam
+    committed = Path(__file__).resolve().parents[1] / "xloil" / "data" / "xlOil.xlam"
+    with zipfile.ZipFile(committed) as z:
+        for name, data in build_xlam._parts().items():
+            data = data.encode("utf-8") if isinstance(data, str) else data
+            assert z.read(name) == data, f"{name} differs: run python tools/build_xlam.py"

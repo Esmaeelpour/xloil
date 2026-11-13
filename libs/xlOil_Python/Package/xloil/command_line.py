@@ -292,7 +292,11 @@ def install_xloil(ini_template:str=None,
     _check_bitness()
 
     # Copy the XLL
-    sh.copy(bin_dir / ADDIN_NAME, _XLL_INSTALL_PATH)
+    try:
+        sh.copy(bin_dir / ADDIN_NAME, _XLL_INSTALL_PATH)
+    except PermissionError:
+        raise SystemExit(f"Can't replace {_XLL_INSTALL_PATH}: Excel is probably running. "
+                         "Close every Excel window (check Task Manager for EXCEL.EXE) and try again.")
     _unblock(_XLL_INSTALL_PATH)
     for f in bin_dir.iterdir():
         if f.suffix.lower() in ('.dll', '.pyd', '.xll'):
@@ -619,6 +623,62 @@ def _set_python_executable(python: str, ini: str = None):
     print(f"PYTHONEXECUTABLE set to {exe}")
 
 
+_RIBBON_MODULES = {"com": "xloil.xloil_ribbon", "xlam": "xloil.xlam_ribbon"}
+
+
+def addins_must_be_signed(version=None) -> bool:
+    """
+        True when Office policy "Require application add-ins to be signed by Trusted
+        Publisher" is on. It blocks xlOil's unsigned COM ribbon, but not xlOil.xlam.
+    """
+    try:
+        version = version or _find_excel_version()
+    except OSError:
+        version = 16
+    for root in (reg.HKEY_CURRENT_USER, reg.HKEY_LOCAL_MACHINE):
+        for base in (r"Software\Policies\Microsoft\Office", r"Software\Microsoft\Office"):
+            with suppress(OSError):
+                key = reg.OpenKey(root, rf"{base}\{version}.0\Excel\Security")
+                value, = reg.QueryValueEx(key, "requireaddinsig")
+                if value == 1:
+                    return True
+    return False
+
+
+def ribbon(kind: str, ini: str = None):
+    """
+        Chooses how xlOil's ribbon tab is drawn:
+          com  - the built-in COM add-in (default)
+          xlam - xlOil.xlam in XLSTART: for computers whose policy requires signed add-ins
+          off  - no ribbon tab
+    """
+    from .xlam_ribbon import xlam_path, XLAM_NAME
+    kind = kind.lower()
+    if kind not in ("com", "xlam", "off"):
+        raise ValueError("Choose com, xlam or off")
+    target = _XL_START_PATH / XLAM_NAME
+    if kind == "xlam":
+        src = xlam_path()
+        if not src.exists():
+            raise FileNotFoundError(f"{src} is missing: reinstall xlOil")
+        _XL_START_PATH.mkdir(parents=True, exist_ok=True)
+        try:
+            sh.copy(src, target)
+        except PermissionError:
+            raise SystemExit(f"Can't replace {target}: close Excel and try again")
+        _unblock(target)
+        print("Installed ", target)
+    elif target.exists():
+        try:
+            target.unlink()
+        except PermissionError:
+            raise SystemExit(f"Can't remove {target}: close Excel and try again")
+        print("Removed ", target)
+    wanted = _RIBBON_MODULES.get(kind)
+    _edit_load_modules(ini, lambda mods: [m for m in mods if m not in _RIBBON_MODULES.values()]
+                       + ([wanted] if wanted else []))
+
+
 def _install_cmd(ini_template=None, python=None, load_modules=None, startup_script=None,
                  replace_ini=False, intellisense=False):
     install_xloil(ini_template, replace_ini=replace_ini)
@@ -747,12 +807,18 @@ def setup(features: str = None, yes: bool = False, no_pip: bool = False, intelli
                   "packages are installed")
         print()
 
-    modules = ["xloil.xloil_ribbon"]
+    use_xlam = addins_must_be_signed()
+    if use_xlam:
+        print("Office policy here requires signed add-ins, which blocks xlOil's COM ribbon:\n"
+              "using the xlOil.xlam ribbon instead.\n")
+    modules = [_RIBBON_MODULES["xlam" if use_xlam else "com"]]
     for f in chosen:
         modules += list(f.modules)
     modules = order_modules(modules)
 
     _install_cmd(load_modules=",".join(modules))
+    if use_xlam:
+        ribbon("xlam")
 
     want_isense = intellisense
     if want_isense is None:
@@ -867,6 +933,16 @@ def doctor():
                     f"Run `xloil config python \"{configured}\"` to add it")
             elif needed:
                 ok(f"Conda PYTHONHOME set")
+        signed_only = addins_must_be_signed()
+        xlam_installed = (_XL_START_PATH / "xlOil.xlam").exists()
+        if "xloil.xloil_ribbon" in text and signed_only:
+            bad("Office policy requires signed add-ins, so the COM ribbon can't load "
+                "(you'd see a 'COM addin connect' error)", "Run `xloil ribbon xlam`")
+        elif "xloil.xlam_ribbon" in text and not xlam_installed:
+            bad("LoadModules has xloil.xlam_ribbon but xlOil.xlam isn't in XLSTART",
+                "Run `xloil ribbon xlam`")
+        elif "xloil.xlam_ribbon" in text:
+            ok("Ribbon: xlOil.xlam")
     else:
         warn(f"No settings file at {ini}: run `xloil install`")
 
@@ -926,6 +1002,11 @@ def main():
     p.add_argument("--no-pip", dest="no_pip", action='store_true',
                    help="Don't pip install the libraries features need")
     p.set_defaults(func=setup)
+
+    p = subparsers.add_parser('ribbon', help="Chooses how the 'xlOil Py' ribbon tab is drawn: com (default), "
+                                             "xlam (for PCs whose policy requires signed add-ins) or off")
+    p.add_argument("kind", choices=["com", "xlam", "off"])
+    p.set_defaults(func=ribbon)
 
     p = subparsers.add_parser('config', help='Reads or changes settings in xlOil.ini')
     config_sub = p.add_subparsers()
