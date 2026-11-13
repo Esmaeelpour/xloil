@@ -929,3 +929,30 @@ def test_committed_xlam_is_up_to_date():
         for name, data in build_xlam._parts().items():
             data = data.encode("utf-8") if isinstance(data, str) else data
             assert z.read(name) == data, f"{name} differs: run python tools/build_xlam.py"
+
+
+def test_addins_must_be_signed_reads_policy(monkeypatch):
+    """ Simulates the Office policy registry value (QueryValueEx returns (value, type)) """
+    from xloil import command_line as cl
+
+    class FakeReg:
+        HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE = "HKCU", "HKLM"
+
+        def __init__(self, values):
+            self.values = values
+
+        def OpenKey(self, root, path):
+            if (root, path) not in self.values:
+                raise OSError("no key")
+            return (root, path)
+
+        def QueryValueEx(self, key, name):
+            return self.values[key], 4
+
+    key = ("HKCU", r"Software\Policies\Microsoft\Office\16.0\Excel\Security")
+    monkeypatch.setattr(cl, "reg", FakeReg({key: 1}))
+    assert cl.addins_must_be_signed(16) is True
+    monkeypatch.setattr(cl, "reg", FakeReg({key: 0}))
+    assert cl.addins_must_be_signed(16) is False
+    monkeypatch.setattr(cl, "reg", FakeReg({}))
+    assert cl.addins_must_be_signed(16) is False
