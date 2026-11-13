@@ -45,6 +45,21 @@ function Fail($msg) {
     exit 1
 }
 
+function Retry([scriptblock]$Action, [string]$What) {
+    # Networks drop connections: try a few times before giving up
+    for ($i = 1; $i -le 4; $i++) {
+        try { return & $Action }
+        catch {
+            if ($i -eq 4) { throw }
+            Write-Host "$What failed ($($_.Exception.Message)), retrying..."
+            Start-Sleep -Seconds (3 * $i)
+        }
+    }
+}
+
+# TLS 1.2 for older Windows PowerShell defaults
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
+
 # 1. Find Python
 if (-not $Python) {
     if ($env:CONDA_PREFIX -and (Test-Path "$env:CONDA_PREFIX\python.exe")) { $Python = "$env:CONDA_PREFIX\python.exe" }
@@ -71,19 +86,19 @@ if ($Wheel) {
 
 # 2. Find the matching wheel in the release
 $api = if ($Version -eq "latest") { "https://api.github.com/repos/$Repo/releases/latest" } else { "https://api.github.com/repos/$Repo/releases/tags/$Version" }
-try { $release = Invoke-RestMethod -Uri $api -Headers @{ "User-Agent" = "xloil-installer" } }
+try { $release = Retry { Invoke-RestMethod -Uri $api -Headers @{ "User-Agent" = "xloil-installer" } } "Reading the release" }
 catch { Fail "Could not read release '$Version' from GitHub: $($_.Exception.Message)" }
 
-$wheel = $release.assets | Where-Object { $_.name -match "^xloil-.*-cp$pyTag-cp$pyTag-win_amd64\.whl$" } | Select-Object -First 1
-if (-not $wheel) {
+$asset = $release.assets | Where-Object { $_.name -match "^xloil-.*-cp$pyTag-cp$pyTag-win_amd64\.whl$" } | Select-Object -First 1
+if (-not $asset) {
     $tags = ($release.assets | Where-Object { $_.name -match "-cp(\d+)-" } | ForEach-Object { $Matches[1] }) -join ", "
     Fail "Release $($release.tag_name) has no wheel for Python cp$pyTag. Available: $tags"
 }
 
 # 3. Download and install it
-$dest = Join-Path $env:TEMP $wheel.name
-Write-Host "Downloading $($wheel.name) from release $($release.tag_name)"
-Invoke-WebRequest -Uri $wheel.browser_download_url -OutFile $dest -UseBasicParsing
+$dest = Join-Path $env:TEMP $asset.name
+Write-Host "Downloading $($asset.name) from release $($release.tag_name)"
+Retry { Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest -UseBasicParsing } "Download" | Out-Null
 }
 Unblock-File $dest
 & $Python -m pip install --upgrade $dest
