@@ -25,17 +25,33 @@ def _webengine_installed() -> bool:
         return False
 
 
+def _avoid_vendor_opengl():
+    """
+        On Qt 5, use ANGLE (OpenGL over Direct3D) unless QT_OPENGL is already set.
+
+        Qt 5's default "desktop" OpenGL loads the graphics card's OpenGL driver into
+        Excel whenever anything needs OpenGL, and some drivers (e.g. older AMD
+        atio6axx.dll) crash Excel. ANGLE goes through Direct3D, as Excel itself
+        does. Must run before the QApplication is created. Qt 6 is unaffected.
+    """
+    try:
+        import qtpy
+        qt_major = int(str(getattr(qtpy, "QT_VERSION", "6")).split(".")[0] or 6)
+    except Exception:
+        return
+    if qt_major < 6 and not os.environ.get("QT_OPENGL"):
+        os.environ["QT_OPENGL"] = "angle"
+        log.debug("Qt 5: using ANGLE (Direct3D) instead of the graphics card's OpenGL driver")
+
+
 def _prepare_webengine():
     """
         Qt WebEngine (used by xloil.plotting for interactive charts) must be imported,
         and OpenGL context sharing enabled, *before* the QApplication is created.
 
-        Context sharing makes Qt create an OpenGL context at start-up. With Qt 5's
-        default "desktop" OpenGL that loads the graphics card's OpenGL driver into
-        Excel, and some drivers (e.g. older AMD atio6axx.dll) crash Excel on start.
-        So this only happens when WebEngine is actually installed, and on Qt 5 it
-        selects ANGLE (OpenGL over Direct3D), which avoids the vendor OpenGL driver,
-        unless QT_OPENGL is already set. Set XLOIL_QT_NO_WEBENGINE=1 to skip all this.
+        Context sharing makes Qt create an OpenGL context at start-up, so it is only
+        turned on when WebEngine is actually installed. Set XLOIL_QT_NO_WEBENGINE=1
+        to skip this.
     """
     if os.environ.get("XLOIL_QT_NO_WEBENGINE"):
         return
@@ -43,11 +59,7 @@ def _prepare_webengine():
         log.debug("Qt WebEngine not installed: interactive charts unavailable")
         return
     try:
-        import qtpy
         from qtpy.QtCore import Qt, QCoreApplication
-        qt_major = int(str(getattr(qtpy, "QT_VERSION", "6")).split(".")[0] or 6)
-        if qt_major < 6 and not os.environ.get("QT_OPENGL"):
-            os.environ["QT_OPENGL"] = "angle"
         QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
         from qtpy import QtWebEngineWidgets  # noqa: F401
         log.info("Qt WebEngine available")
@@ -81,6 +93,7 @@ def _create_Qt_app():
 
     from qtpy.QtWidgets import QApplication
 
+    _avoid_vendor_opengl()
     _prepare_webengine()
     
     #

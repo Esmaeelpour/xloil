@@ -11,7 +11,8 @@ upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation i
   drivers (seen with an AMD `atio6axx.dll` OpenGL driver). `xloil.gui.qtpy` turned on
   Qt's OpenGL context sharing even when Qt WebEngine wasn't installed, which loaded
   the vendor OpenGL driver into Excel. It's now only turned on when WebEngine is
-  installed, and Qt 5 then uses ANGLE (Direct3D) unless `QT_OPENGL` is set.
+  installed, and on Qt 5 xlOil always uses ANGLE (Direct3D) unless `QT_OPENGL` is
+  set, so the vendor OpenGL driver is never loaded into Excel.
 - Choosing a conda environment in the ribbon now sets `PYTHONHOME`. Before, Python
   failed to start after the restart.
 - xlOil finds its binaries when pip installed it per-user, which pip does when the
