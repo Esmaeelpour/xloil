@@ -1,6 +1,24 @@
-
 xlOil
 =====
+
+> **This is a fork of [cunnane/xloil](https://github.com/cunnane/xloil)** that adds
+> features closing the main gaps with PyXLL. All additions are in the Python package
+> and are opt-in; the compiled add-in is unchanged. See
+> [Fork Features](docs/source/xlOil_Python/NewFeatures.rst) for the full list and
+> [CHANGELOG-fork.md](CHANGELOG-fork.md) for what changed.
+>
+> | Area | Added |
+> |---|---|
+> | Charts | Interactive plotly / bokeh / altair charts on the sheet; matplotlib, pandas, seaborn pictures; custom libraries |
+> | Sheet UI | Qt/Tk/wx widgets placed on the worksheet; pluggable GUI toolkit bridge; right-click context menus; Add-ins menus |
+> | Data | Excel Tables in and out; polars; cell formatting from functions; cache objects saved in the workbook; LRU cache; workbook metadata |
+> | Functions | Plain generators as RTD functions; macro options (screen updating, alerts, calc, restore selection) |
+> | Dev tools | Excel-DNA IntelliSense tooltips; `xloil.reload()`; `xloil status/config` CLI; `StartupScript`; stub mode + `xloil.testing` + `xloil-stubs` wheel |
+>
+> Binaries and wheels: [GitHub Releases](https://github.com/Esmaeelpour/xloil/releases).
+> Install (python.org, conda or venv; 64-bit Excel and Python 3.9–3.14):
+> `pip install xloil-<version>-cp3XX-cp3XX-win_amd64.whl`, then `xloil install`, then `xloil doctor`.
+> See [Installing on Another Computer](docs/source/xlOil_Python/Installing.rst).
 
 xlOil provides framework for interacting with Excel in different programming
 languages. It gives a way to write functions in a language and have them 

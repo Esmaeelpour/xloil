@@ -8,6 +8,15 @@ import sys
 XLOIL_EMBEDDED = importlib.util.find_spec("xloil_core") is not None
 XLOIL_READTHEDOCS = 'READTHEDOCS' in os.environ
 
+# Stub mode: import the pure-python API stubs instead of the compiled extension.
+# Used automatically on non-Windows platforms and when XLOIL_STUBS=1, so code
+# using xloil can be imported and unit tested anywhere (see xloil.testing).
+# The xloil-stubs distribution ships a marker file to always select stub mode.
+XLOIL_STUB_MODE = not XLOIL_EMBEDDED and not XLOIL_READTHEDOCS and (
+    os.environ.get("XLOIL_STUBS", "") not in ("", "0") 
+    or sys.platform != "win32"
+    or os.path.exists(os.path.join(os.path.dirname(__file__), "_STUBS_ONLY")))
+
 if XLOIL_EMBEDDED:
     """
     This looks like hocus pocus, but if we don't do it Qt (and possibly others)
@@ -21,6 +30,13 @@ if XLOIL_EMBEDDED:
         if not name.startswith("="):
             os.environ[name] = val
 
+    # Must run before anything imports Qt: see the function's docstring
+    try:
+        from ._paths import preload_system_icu
+        preload_system_icu()
+    except Exception:
+        pass
+
     try: 
         from xloil_core import _LogWriter
         from conda.activate import CmdExeActivator
@@ -31,7 +47,7 @@ if XLOIL_EMBEDDED:
     except ImportError:
         pass
 
-elif not XLOIL_READTHEDOCS:
+elif not XLOIL_READTHEDOCS and not XLOIL_STUB_MODE:
 
     # We try to load xlOil_PythonXY.pyd where XY is the python version
     # if we succeed, we fake an entry in sys.modules so that future 
@@ -63,12 +79,17 @@ try:
 except ImportError:
 
     # Fallback to stubs
-    from .stubs.xloil_core import *
-    from .stubs.xloil_core import _LogWriter, _AddinsDict, _DateFormatList 
-    
-    # Not completely sure this part is necessary in stubs mode
     from .stubs import xloil_core
+    from .stubs.xloil_core import event as _stub_event  # noqa: ensures submodule is loaded
+    if XLOIL_STUB_MODE:
+        # Give the stubs enough behaviour to support unit testing
+        from .stubs import _runtime
+        _runtime.install(xloil_core)
     sys.modules['xloil_core'] = xloil_core
+    sys.modules['xloil_core.event'] = xloil_core.event
+
+    from xloil_core import *
+    from xloil_core import _LogWriter, _AddinsDict, _DateFormatList 
    
 
 if XLOIL_READTHEDOCS:

@@ -79,3 +79,48 @@ def _get_environment_strings():
         ctypes.windll.kernel32.FreeEnvironmentStringsA(p)
     
     return result
+
+def _pip_qt_installed() -> bool:
+    """ True if a pip-wheel Qt binding (which bundles its own Qt DLLs) is installed """
+    import importlib.util
+    for package, core_dll in (("PySide6", "Qt6Core.dll"), ("PyQt6", os.path.join("Qt6", "bin", "Qt6Core.dll")),
+                              ("PySide2", "Qt5Core.dll"), ("PyQt5", os.path.join("Qt5", "bin", "Qt5Core.dll"))):
+        try:
+            spec = importlib.util.find_spec(package)
+        except (ImportError, ValueError):
+            spec = None
+        if spec is not None and spec.submodule_search_locations:
+            for location in spec.submodule_search_locations:
+                if os.path.exists(os.path.join(location, core_dll)):
+                    return True
+    return False
+
+
+def preload_system_icu():
+    r"""
+        Avoids a DLL clash between pip-installed Qt and conda environments.
+
+        Pip wheels of Qt link against Windows' own ICU (System32\icuuc.dll). Conda
+        environments often contain a different, versioned ICU with the same file
+        name in Library\bin, which conda's Python adds to the DLL search path, so
+        Qt fails with "DLL load failed ... The specified procedure could not be
+        found". Loading the system ICU by full path first makes Windows reuse it
+        for Qt. Only acts when both conditions for the clash are present.
+    """
+    if os.name != "nt":
+        return False
+    conda_icu = os.path.join(sys.prefix, "Library", "bin", "icuuc.dll")
+    if not os.path.exists(conda_icu) or not _pip_qt_installed():
+        return False
+    import ctypes
+    system32 = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32")
+    loaded = False
+    for name in ("icuuc.dll", "icuin.dll"):
+        path = os.path.join(system32, name)
+        if os.path.exists(path):
+            try:
+                ctypes.WinDLL(path)
+                loaded = True
+            except OSError:
+                pass
+    return loaded

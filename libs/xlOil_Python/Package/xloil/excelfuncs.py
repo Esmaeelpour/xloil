@@ -94,3 +94,35 @@ def xloPyDebug(Debugger:str = ""):
     else:
         xloil.debug.use_debugger(None)
         return "OFF"
+
+
+@xlo.func(command=True,
+    help="Reloads all Python modules loaded by xlOil and re-registers their functions, "
+         "without restarting Excel. Run from the Macros dialog, a button or a menu.")
+def xloReload():
+    from xloil.importer import reload
+    names = reload()
+    xlo.log.info(f"xloReload: reloading {', '.join(names) or 'nothing'}")
+    try:
+        xlo.app().StatusBar = f"xlOil: reloading {len(names)} module(s)"
+    except Exception:
+        pass
+
+
+@xlo.func(
+    help="Reloads one Python module by name and re-registers its functions. "
+         "Returns the module name, or an error if it is not loaded.",
+    args={'ModuleName': 'The module name, e.g. "mymodule"'})
+def xloReloadModule(ModuleName: str):
+    from xloil.importer import reload
+    names = reload(ModuleName)
+    if not names:
+        raise ValueError(f"Module '{ModuleName}' is not loaded")
+    return names[0]
+
+
+@xlo.func(command=True,
+    help="Rewrites the Excel-DNA IntelliSense description files for all xlOil add-ins")
+def xloIntelliSenseRefresh():
+    from xloil.intellisense import refresh
+    refresh()
