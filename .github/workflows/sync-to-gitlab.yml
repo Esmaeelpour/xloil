@@ -6,6 +6,8 @@ on:
 
 jobs:
   sync:
+    # Only the upstream repository has the GitLab mirror credentials
+    if: github.repository == 'cunnane/xloil'
     runs-on: ubuntu-latest
     name: Git Repo Sync
     steps:

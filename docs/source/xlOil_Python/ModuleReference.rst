@@ -326,3 +326,71 @@ External libraries
 .. automodule:: xloil.matplotlib
 	:members: ReturnFigure
 
+
+
+Fork Features
+-------------
+
+These modules are added by the PyXLL-parity fork, see :doc:`NewFeatures`.
+
+.. currentmodule:: xloil
+
+.. autosummary::
+	Formatter
+	DataFrameFormatter
+	ConditionalFormatter
+	NumberFormatter
+	DateFormatter
+	Table
+	TableReturn
+	read_table
+	write_table
+	lru_cache
+	workbook_metadata
+	WorkbookMetadata
+	MacroContext
+	context_menu
+	menu
+	reload
+
+.. automodule:: xloil.formatting
+	:members:
+
+.. automodule:: xloil.tables
+	:members: Table, TableReturn, read_table, write_table
+
+.. automodule:: xloil.polars
+	:members: PolarsFrame, PolarsSeries
+
+.. automodule:: xloil.lru
+	:members: lru_cache
+
+.. automodule:: xloil.metadata
+	:members: workbook_metadata, WorkbookMetadata
+
+.. automodule:: xloil.cache_persist
+	:members: enable, disable, mark_persistent, persist_type, save, restore
+
+.. automodule:: xloil.menus
+	:members: context_menu, menu, remove_menu_item, remove_all, menu_items
+
+.. autoclass:: xloil.MacroContext
+
+.. autofunction:: xloil.importer.reload
+
+.. autofunction:: xloil.importer.run_startup_scripts
+
+.. automodule:: xloil.plotting
+	:members: plot, register_plot_type, set_plot_mode, webengine_available
+
+.. automodule:: xloil.gui.sheet_control
+	:members: SheetControl, place_control, find_control, all_controls, set_tracking_interval
+
+.. automodule:: xloil.gui.toolkits
+	:members: GuiToolkit, register_toolkit, find_toolkit, registered_toolkits, ToolkitTaskPane, HwndWindow
+
+.. automodule:: xloil.intellisense
+	:members: enable, refresh, write_addin_file, write_workbook_part, install_intellisense_addin
+
+.. automodule:: xloil.testing
+	:members:

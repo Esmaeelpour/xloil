@@ -7,6 +7,7 @@ xlOil Python
     :caption: Contents
 
     GettingStarted
+    NewFeatures
     Concepts
     Functions
     TypeConversion
@@ -17,10 +18,16 @@ xlOil Python
     BuiltInUDFs
     Jupyter
     Rtd
+    Plotting
+    SheetControls
+    DataFeatures
+    FunctionsAndMacros
+    DeveloperTools
     Debugging
     DistributingAddins
     Example
     ExampleGUI
     ExampleRTD
     FAQ
+    Stability
     ModuleReference

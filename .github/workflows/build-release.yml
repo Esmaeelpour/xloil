@@ -86,10 +86,21 @@ jobs:
         shell: pwsh
         run: 7z x external\python.7z -oexternal -y
 
-      # The COM code #imports the Office and Excel type libraries
+      # The COM code #imports the MSO, VBE, Excel and Add-in Designer type
+      # libraries, which only come with Office. Microsoft's download is flaky
+      # on CI runners, so retry.
       - name: Install Office to get the Excel type libraries
         shell: pwsh
-        run: choco install office365business --no-progress -y
+        timeout-minutes: 60
+        run: |
+          for ($i = 1; $i -le 3; $i++) {
+            choco install office365business --no-progress -y
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "Office install attempt $i failed with $LASTEXITCODE, retrying in 60s"
+            choco uninstall office365business -y --skip-autouninstaller 2>$null
+            Start-Sleep -Seconds 60
+          }
+          exit 1
 
       - name: Set up MSBuild
         uses: microsoft/setup-msbuild@v2
