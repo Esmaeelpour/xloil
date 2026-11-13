@@ -4,6 +4,30 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post3
+
+Command-line and installer fixes found setting up a locked-down work laptop. The
+compiled add-in files are unchanged (still v0.22.1.post1's, see post2).
+
+- `xloil config get/set` work with settings inside the `[[xlOil_Python.Environment]]`
+  blocks, e.g. `xlOil_Python.Environment.XLOIL_PYTHON_PATH`.
+- `xloil config set` refuses a value that isn't a list for list settings
+  (`LoadModules`, `Plugins`, `DateFormats`, `AutoReloadExcludePaths`). Before, a typo
+  could leave xlOil unable to load its modules.
+- New commands: `xloil config add-module <name>`, `remove-module <name>` (keeps
+  modules in load order) and `add-path <folder>` (adds a folder of your own modules
+  to the search path). These replace editing lists or `xlOil.ini` by hand.
+- `xloil intellisense install` no longer says to enable IntelliSense when it's
+  already enabled.
+- The installer tries each Python it finds and, if none starts, lists the error for
+  each, with a hint when `PYTHONHOME`/`PYTHONPATH` are set, instead of
+  "No Python found".
+
+Notes for locked-down computers: if Office's policy requires add-ins to be signed,
+the *xlOil Py* ribbon tab can't load (worksheet functions still work), so use the
+`config` commands. If VBA project access is disabled by policy, register functions
+in workbook modules with `@xlo.func(local=False)`.
+
 ## 0.22.1.post2
 
 ### Fixes
