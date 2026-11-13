@@ -4,6 +4,13 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post9
+
+- Fixed: `xloil doctor` (and so the end of `xloil setup`) wrongly reported "Office
+  policy requires signed add-ins, so the COM ribbon can't load" after the xlOil.xlam
+  ribbon was set up. It searched the whole settings file, whose comments mention
+  `xloil.xloil_ribbon`; it now reads only the `LoadModules` value.
+
 ## 0.22.1.post8
 
 - `install.ps1` no longer uses GitHub's API (api.github.com), which company networks
