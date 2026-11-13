@@ -74,10 +74,12 @@ setup(
     description="Excel interop for Python and Jupyter",
     long_description=contents_of_readme,
     long_description_content_type="text/markdown",
-    url="https://gitlab.com/stevecu/xloil",
-    download_url='https://gitlab.com/stevecu/xloil/-/releases/',
+    maintainer="Esmaeelpour (fork with PyXLL-parity features)",
+    url="https://github.com/Esmaeelpour/xloil",
+    download_url='https://github.com/Esmaeelpour/xloil/releases',
     project_urls = {
-      'Documentation': 'https://xloil.readthedocs.io/en/stable',
+      'Documentation': 'https://github.com/Esmaeelpour/xloil/tree/feature/pyxll-parity/docs/source',
+      'Upstream': 'https://github.com/cunnane/xloil',
     },
     license='Apache',
     
@@ -98,7 +100,12 @@ setup(
         'tomlkit'
     ],
     extras_require={
-        "com": ["pywin32", "tkinter"],
+        "com": ["pywin32"],
+        "pandas": ["pandas"],
+        "polars": ["polars"],
+        "qt": ["qtpy", "PySide6"],
+        "plotting": ["matplotlib", "plotly", "qtpy", "PySide6"],
+        "test": ["pytest", "pandas", "polars", "matplotlib"],
     },
     classifiers=[
         'Development Status :: 5 - Production/Stable',

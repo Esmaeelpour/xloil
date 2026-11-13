@@ -11,8 +11,11 @@ XLOIL_READTHEDOCS = 'READTHEDOCS' in os.environ
 # Stub mode: import the pure-python API stubs instead of the compiled extension.
 # Used automatically on non-Windows platforms and when XLOIL_STUBS=1, so code
 # using xloil can be imported and unit tested anywhere (see xloil.testing).
+# The xloil-stubs distribution ships a marker file to always select stub mode.
 XLOIL_STUB_MODE = not XLOIL_EMBEDDED and not XLOIL_READTHEDOCS and (
-    os.environ.get("XLOIL_STUBS", "") not in ("", "0") or sys.platform != "win32")
+    os.environ.get("XLOIL_STUBS", "") not in ("", "0") 
+    or sys.platform != "win32"
+    or os.path.exists(os.path.join(os.path.dirname(__file__), "_STUBS_ONLY")))
 
 if XLOIL_EMBEDDED:
     """
