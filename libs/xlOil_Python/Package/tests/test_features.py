@@ -746,3 +746,21 @@ def test_setup_subcommand_registered(monkeypatch, capsys):
         cl.main()
     out = capsys.readouterr().out
     assert "--features" in out and "--yes" in out
+
+
+def test_install_dir_prefers_per_user_binaries(tmp_path, monkeypatch):
+    import importlib, site, xloil._paths as paths
+    prefix = tmp_path / "conda"; userbase = tmp_path / "user"
+    for base in (prefix, userbase):
+        (base / "share" / "xloil").mkdir(parents=True)
+        (base / "share" / "xloil" / "xlOil.xll").write_text("")
+    usersite = userbase / "site-packages"
+    monkeypatch.setattr(sys, "prefix", str(prefix))
+    monkeypatch.setattr(site, "getuserbase", lambda: str(userbase))
+    monkeypatch.setattr(site, "getusersitepackages", lambda: str(usersite))
+    # Package in the environment: the environment's binaries win
+    monkeypatch.setattr(paths, "__file__", str(prefix / "Lib" / "site-packages" / "xloil" / "_paths.py"))
+    assert paths._find_install_dir() == str(prefix / "share" / "xloil")
+    # Package installed per-user: the per-user binaries win
+    monkeypatch.setattr(paths, "__file__", str(usersite / "xloil" / "_paths.py"))
+    assert paths._find_install_dir() == str(userbase / "share" / "xloil")

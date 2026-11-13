@@ -11,12 +11,21 @@ def _find_install_dir():
         not writable, e.g. a conda base in C:\\ProgramData) they go to
         <user base>/share/xloil instead.
     """
-    candidates = [os.path.join(sys.prefix, "share", "xloil")]
+    prefix_dir = os.path.join(sys.prefix, "share", "xloil")
+    candidates = [prefix_dir]
     try:
         import site
         user_base = site.getuserbase()
         if user_base:
-            candidates.append(os.path.join(user_base, "share", "xloil"))
+            user_dir = os.path.join(user_base, "share", "xloil")
+            # If this package was itself installed per-user, its binaries are the
+            # per-user ones: prefer them over an older all-users install
+            here = os.path.normcase(os.path.abspath(__file__))
+            user_site = os.path.normcase(os.path.abspath(site.getusersitepackages()))
+            if here.startswith(user_site + os.sep):
+                candidates.insert(0, user_dir)
+            else:
+                candidates.append(user_dir)
     except Exception:
         pass
     for path in candidates:
