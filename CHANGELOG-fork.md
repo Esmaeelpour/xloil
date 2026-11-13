@@ -38,6 +38,13 @@ upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation i
   release from a single build; it's published after testing.
 - The binaries zip no longer includes extensions for Python 3.7 and 3.8, which are
   end-of-life and had no wheels.
+- When the C++ is unchanged (checked by `tools/native_hash.py`), CI reuses the
+  binaries of the last verified release (`tools/native-binaries.json`) instead of
+  compiling. A fresh unsigned build of the same source was falsely flagged by
+  Windows Defender's machine-learning check (`Trojan:Win32/Bearfoos.A!ml`), so this
+  release ships v0.22.1.post1's binaries, built from identical C++. It also cuts a
+  Python-only build from about 17 minutes to a few. Run the workflow manually with
+  `force_compile` to compile anyway.
 
 ## 0.22.1.post1
 
