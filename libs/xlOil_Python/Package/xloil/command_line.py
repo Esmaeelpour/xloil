@@ -698,9 +698,18 @@ def doctor():
     else:
         warn(f"No settings file at {ini}: run `xloil install`")
 
-    if 'conda' in sys.version.lower() or (Path(sys.prefix) / "conda-meta").exists():
-        warn("Conda environment: install Qt with conda (conda install pyside6 or pyqt) rather "
-             "than pip, to avoid Qt DLL clashes with the environment's Library\\bin")
+    if (Path(sys.prefix) / "conda-meta").exists():
+        if importlib.util.find_spec("qtpy") is not None or importlib.util.find_spec("PySide6") is not None:
+            try:
+                import PySide6
+                if (Path(PySide6.__file__).parent / "Qt6Core.dll").exists():
+                    ok("Conda env with pip PySide6: xlOil avoids the ICU DLL clash automatically")
+                else:
+                    warn("conda-forge PySide6 on Windows has no Qt WebEngine, so interactive charts "
+                         "fall back to pictures. For interactive charts: "
+                         "conda remove pyside6 && pip install PySide6")
+            except ImportError:
+                pass
 
     print(f"\n{problems} problem(s) found" if problems else "\nNo problems found")
     return problems

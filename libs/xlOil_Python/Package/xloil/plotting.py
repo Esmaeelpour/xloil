@@ -234,7 +234,16 @@ def plot(obj, size: Tuple[float, float] = None, offset: Tuple[int, int] = None,
         if handler.to_png is None:
             raise TypeError(f"{handler.name} charts cannot be exported as images. "
                             "Install the library's image export dependency")
-        _show_static(obj, handler.to_png, location, size, offset)
+        try:
+            _show_static(obj, handler.to_png, location, size, offset)
+        except Exception as e:
+            if handler.to_html is None:
+                raise
+            reason = str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__
+            raise RuntimeError(
+                f"Cannot show {handler.name} chart. Interactive charts need Qt WebEngine "
+                f"(pip install qtpy PySide6, with xloil.gui.qtpy in LoadModules before "
+                f"xloil.plotting); the picture fallback failed: {reason}") from None
 
     return label or f"[{handler.name} chart]"
 

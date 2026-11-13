@@ -540,7 +540,7 @@ def xloJpyConnect(ConnectInfo: str):
     from urllib.parse import urlparse
 
     connection_file = None
-    if re.match('kernel-[a-z0-9\-]*.json', ConnectInfo, re.IGNORECASE):
+    if re.match(r'kernel-[a-z0-9\-]*.json', ConnectInfo, re.IGNORECASE):
         # Kernel connection file provided
         connection_file = ConnectInfo
     else:

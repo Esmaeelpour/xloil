@@ -30,6 +30,13 @@ if XLOIL_EMBEDDED:
         if not name.startswith("="):
             os.environ[name] = val
 
+    # Must run before anything imports Qt: see the function's docstring
+    try:
+        from ._paths import preload_system_icu
+        preload_system_icu()
+    except Exception:
+        pass
+
     try: 
         from xloil_core import _LogWriter
         from conda.activate import CmdExeActivator

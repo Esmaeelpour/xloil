@@ -79,16 +79,24 @@ installation with a ``conda-meta`` folder) and write ``PYTHONHOME`` into the
 settings, so this is automatic. If you edit ``xlOil.ini`` by hand, add
 ``PYTHONHOME='''<env folder>'''`` next to ``PYTHONEXECUTABLE``.
 
-**Qt in conda**: install Qt from conda, not pip:
+**Qt in conda**: use the pip wheels of PySide6, which include Qt WebEngine for
+interactive charts:
 
 .. code-block:: bat
 
-    conda install -c conda-forge pyside6 qtpy
+    pip install qtpy PySide6
 
-A pip-installed PySide6 can clash with Qt DLLs that other conda packages put in
-the environment's ``Library\bin``, which xlOil adds to ``PATH``. The symptom is
-*"DLL load failed while importing QtWidgets: The specified procedure could not
-be found"*.
+conda-forge's ``pyside6`` package works for task panes and sheet controls, but its
+Windows build has no Qt WebEngine, so interactive charts fall back to pictures.
+
+Pip's Qt links against Windows' own ICU library (``System32\icuuc.dll``). Many
+conda environments contain a different ICU with the same file name in
+``Library\bin``, which conda's Python puts on the DLL search path. Outside xlOil
+this makes Qt fail with *"DLL load failed while importing QtWidgets: The
+specified procedure could not be found"*. xlOil detects this situation when it
+starts in Excel and loads the system ICU first, so it doesn't affect add-ins.
+To use the same environment's Qt from a normal Python prompt, avoid installing
+conda's ``icu``/``qt`` packages alongside pip's PySide6.
 
 Virtual environments
 --------------------
@@ -147,7 +155,10 @@ No xlOil tab, nothing in the log                       Excel blocked the add-in:
 filesystem encoding" in ``xlOil.log``                  ``xloil config python <env>\python.exe``
 ``#NAME?`` for your functions                          Module not loaded: check ``LoadModules`` and the
                                                        log at ``%APPDATA%\xlOil\xlOil.log``
-"DLL load failed ... QtWidgets"                        Conda + pip Qt: ``conda install pyside6``
+"DLL load failed ... QtWidgets" in a Python prompt     Conda ICU vs pip Qt clash (handled inside Excel);
+                                                       see *Qt in conda* above
+Interactive charts show as pictures                    No Qt WebEngine: ``pip install PySide6`` and load
+                                                       ``xloil.gui.qtpy`` before ``xloil.plotting``
 "is not a valid Win32 application"                     32-bit Excel or Python: use 64-bit for both
 Functions using ``xloil.app()`` fail                   ``pip install pywin32``
 =====================================================  =================================================

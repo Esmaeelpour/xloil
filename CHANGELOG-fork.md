@@ -71,9 +71,16 @@ the `xloil` Python package and is opt-in.
   internet-download mark that makes Office block XLLs.
 - `xloil create` also configures the settings file shipped with the binaries, so a
   created add-in works on a computer where `xloil install` was never run.
+- **Pip Qt in conda**: xlOil preloads Windows' ICU when a conda environment's own
+  `icuuc.dll` would otherwise break pip-installed PySide6/PyQt ("procedure could not
+  be found"), so interactive charts work in conda environments.
+- Clearer error when a chart can be shown neither interactively nor as a picture.
 - New docs page: Installing on Another Computer.
+- Tested end to end in Excel with python.org Python 3.9, a conda Python 3.12 env, and
+  a venv built on conda Python 3.10.
 
 ### Fixes
+- Invalid escape sequence warning in `xloil.jupyter` on Python 3.12+.
 - `xloil.PauseExcel(...)` now honours its constructor arguments. Upstream always
   paused events, calculation, screen updating and alerts.
 
