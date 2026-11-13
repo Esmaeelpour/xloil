@@ -39,6 +39,21 @@ class Settings:
         table = self._find_table(self.python['Environment'], name)
         return table[name]
 
+    def set_env_var_next_to(self, name, value, neighbour):
+        """
+            Sets `name` in the Environment block that contains `neighbour`, adding
+            it if missing. A value of None removes `name`.
+        """
+        try:
+            table = self._find_table(self.python['Environment'], name)
+        except KeyError:
+            table = self._find_table(self.python['Environment'], neighbour)
+        if value is None:
+            if name in table:
+                del table[name]
+        else:
+            table[name] = value
+
     def set_addin_env_var(self, name, value):
         """ Sets the value of a token in the xlOil addin's Environment block """
         table = self._find_table(self.addin['Environment'], name)
@@ -143,8 +158,19 @@ def get_user_search_path(ctrl):
 # -------------------------------
 #
 
+def _set_python_executable_setting(exe_path):
+    """
+        Sets PYTHONEXECUTABLE and, for conda pythons, PYTHONHOME: without it a
+        conda interpreter cannot start inside Excel. See
+        `xloil.command_line.python_home_for`.
+    """
+    from xloil.command_line import python_home_for
+    _settings.set_env_var("PYTHONEXECUTABLE", exe_path)
+    _settings.set_env_var_next_to("PYTHONHOME", python_home_for(exe_path), "PYTHONEXECUTABLE")
+
+
 async def set_python_home(ctrl, value):
-    _settings.set_env_var("PYTHONEXECUTABLE", value)
+    _set_python_executable_setting(value)
     _settings.save()
 
     restart_notify()
@@ -284,7 +310,7 @@ async def set_python_environment(ctrl, id, index):
                         "Unless it is installed, xlOil will not load correctly when Excel is restarted.",
                         exe_path)
 
-    _settings.set_env_var("PYTHONEXECUTABLE", exe_path)
+    _set_python_executable_setting(exe_path)
 
     # Clear the version override if set (it shouldn't generally be required)
     _settings.set_env_var("XLOIL_PYTHON_VERSION", "")
@@ -307,8 +333,21 @@ def get_python_environment_count(ctrl):
     return len(_PYTHON_ENVIRONMENTS)
 
 
+def _env_label(env) -> str:
+    """ Environment name, with its Python version and whether xlOil is installed in it """
+    exe = Path(env.executable)
+    version = env.version
+    if version in ("?", "", None):
+        dlls = sorted(exe.parent.glob("python3*.dll"))
+        dlls = [d for d in dlls if d.stem != "python3"]
+        version = f"3.{dlls[0].stem[7:]}" if dlls else "?"
+    has_xloil = (exe.parent / "share" / "xloil" / "xlOil.xll").exists() or \
+                (exe.parent.parent / "share" / "xloil" / "xlOil.xll").exists()
+    return f"{env.name} ({version}){'' if has_xloil else ' - xlOil not installed'}"
+
+
 def get_python_environment(ctrl, i):
-    return _PYTHON_ENVIRONMENTS[i].name
+    return _env_label(_PYTHON_ENVIRONMENTS[i])
 
 
 def get_python_environment_selected(ctrl):
@@ -321,8 +360,9 @@ def get_python_environment_selected(ctrl):
 #
 
 async def set_load_modules(ctrl, value):
-    # Allow a semi-colon separator
-    modules = value.replace(";", ",").split(",")
+    from xloil.features import order_modules
+    # Allow a semi-colon separator, ignore blanks and put xlOil modules in load order
+    modules = order_modules([m.strip() for m in value.replace(";", ",").split(",") if m.strip()])
     _settings.python['LoadModules'] = modules
     _settings.save()
 
@@ -482,6 +522,106 @@ def _fix_name_errors(ctrl):
 
 
 #
+# Features menu callbacks
+# -----------------------
+# Each checkbox adds/removes the feature's modules from LoadModules, in the
+# right order, so users don't need to know module names.
+#
+
+def _feature_for(ctrl):
+    from xloil.features import find_feature
+    return find_feature(ctrl.tag)
+
+
+def get_feature_pressed(ctrl):
+    from xloil.features import feature_enabled
+    return feature_enabled(_feature_for(ctrl), list(_settings.python['LoadModules']))
+
+
+def get_feature_enabled(ctrl):
+    from xloil.features import feature_available, feature_enabled
+    feature = _feature_for(ctrl)
+    # Always allow unticking, even if the library has since been removed
+    return feature_available(feature) or \
+        feature_enabled(feature, list(_settings.python['LoadModules']))
+
+
+def get_feature_supertip(ctrl):
+    from xloil.features import feature_available
+    feature = _feature_for(ctrl)
+    tip = feature.description
+    if not feature_available(feature) and feature.pip:
+        tip += f". Not installed: run  pip install {feature.pip}  in this Python, then restart Excel"
+    return tip
+
+
+async def set_feature(ctrl, pressed):
+    from xloil.features import set_feature as _set
+    feature = _feature_for(ctrl)
+    modules = _set(list(_settings.python['LoadModules']), feature, pressed)
+    _settings.python['LoadModules'] = modules
+    _settings.save()
+    _ribbon_ui.invalidate("ebx3")
+
+    if pressed:
+        import importlib
+        for m in feature.modules:
+            try:
+                if m not in sys.modules:
+                    importlib.import_module(m)
+            except Exception as err:
+                xloil.log.warn(f"Feature '{feature.label}': could not load {m}: {err}")
+                restart_notify()
+    else:
+        # Modules can't be unloaded from a running Python
+        restart_notify()
+
+
+def _features_menu_xml() -> str:
+    from xloil.features import FEATURES
+    from xml.sax.saxutils import quoteattr
+    items = "".join(
+        f'<checkBox id="feature_{f.key}" tag="{f.key}" label={quoteattr(f.label)} '
+        f'getPressed="get_feature_pressed" getEnabled="get_feature_enabled" '
+        f'getSupertip="get_feature_supertip" onAction="set_feature"/>'
+        for f in FEATURES)
+    return (f'<menu id="featuresMenu" label="Features" size="large" imageMso="AddInManager" '
+            f'screentip="Turn optional xlOil features on or off" '
+            f'supertip="Adds or removes the modules in Load Modules for you">{items}</menu>')
+
+
+#
+# Tools callbacks
+# ---------------
+#
+
+async def press_doctor(ctrl):
+    """ Runs `xloil doctor` and opens the report """
+    import io
+    import contextlib
+    import tempfile
+    from xloil.command_line import doctor
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        try:
+            doctor()
+        except Exception as e:
+            print(f"Doctor failed: {e}")
+    report = Path(tempfile.gettempdir()) / "xlOil_doctor.txt"
+    report.write_text(buffer.getvalue(), encoding="utf-8")
+    os.startfile(str(report))
+
+
+async def press_reload(ctrl):
+    names = xloil.reload()
+    xloil.log.info(f"Ribbon reload: {', '.join(names) or 'nothing to reload'}")
+
+
+async def press_edit_settings(ctrl):
+    os.startfile(_settings.path)
+
+
+#
 # Ribbon creation
 # ---------------
 #
@@ -517,6 +657,7 @@ _ribbon_ui = xloil.ExcelGUI(ribbon=r'''
                 onChange="set_python_path" />
             </group>
             <group id="grp1" autoScale="false" centerVertically="false" label="Modules">
+              <!--FEATURES-->
               <editBox id="ebx3" label="Load Modules" sizeString="a module; another module; another"
                 screentip="Python modules to load"
                 supertip="The modules must be available on python's sys.path. Use a comma to separate."
@@ -529,6 +670,20 @@ _ribbon_ui = xloil.ExcelGUI(ribbon=r'''
                 onChange="set_user_search_path"/>
               <labelControl id="RestartLabel" label="!Restart Required!" 
                 getVisible="get_restart_label_visible" />
+            </group>
+            <group id="grpTools" autoScale="false" centerVertically="false" label="Tools">
+              <button id="btnDoctor" size="large" label="Doctor" imageMso="ReviewProtectDocument"
+                onAction="press_doctor"
+                screentip="Check the installation"
+                supertip="Checks Excel/Python bitness, the C++ runtime, required packages, the add-in and settings, and says how to fix any problem"/>
+              <button id="btnReload" size="large" label="Reload" imageMso="Refresh"
+                onAction="press_reload"
+                screentip="Reload Python modules"
+                supertip="Reloads every module xlOil registered functions from, without restarting Excel"/>
+              <button id="btnSettings" size="large" label="Settings File" imageMso="FileProperties"
+                onAction="press_edit_settings"
+                screentip="Open xlOil.ini"
+                supertip="Opens the settings file in your text editor. Most changes need an Excel restart"/>
             </group>
             <group id="grp2" autoScale="false" centerVertically="false" label="Debugging" >
               <button id="btn5" size="large" label="Console" imageMso="ContainerGallery" 
@@ -583,5 +738,5 @@ _ribbon_ui = xloil.ExcelGUI(ribbon=r'''
         </tabs>
       </ribbon>
     </customUI>
-    ''', 
+    '''.replace("<!--FEATURES-->", _features_menu_xml()),
     funcmap=_ribbon_func_map)

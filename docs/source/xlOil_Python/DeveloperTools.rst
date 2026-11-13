@@ -68,6 +68,8 @@ After ``pip install`` of the wheel:
     xloil install --startup-script C:\addins\startup.py --intellisense
     xloil status                                :: what's installed and how it's configured
     xloil doctor                                :: check for problems that stop xlOil loading
+    xloil setup                                 :: guided set-up: features, libraries, add-in, checks
+    xloil setup --features pandas,charts --yes  :: the same, without questions
     xloil config list
     xloil config get xlOil_Python.LoadModules
     xloil config set xlOil_Python.LoadModules "['xloil.xloil_ribbon', 'mymod']"
@@ -151,7 +153,7 @@ to Excel. This is enough to unit test add-in code in any CI system.
 
 .. code-block:: bash
 
-    pip install xloil_stubs-0.22.1.post1-py3-none-any.whl numpy pytest
+    pip install xloil_stubs-0.22.1.post2-py3-none-any.whl numpy pytest
     pytest
 
 ``xloil.testing``

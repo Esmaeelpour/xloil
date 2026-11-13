@@ -1,8 +1,11 @@
 name: Build and release
 
 # Builds the xlOil add-in (Release x64), one Python wheel per supported Python
-# version and the pure-Python xloil-stubs wheel, runs the tests, and on a
-# version tag (v*) publishes everything as a GitHub Release.
+# version and the pure-Python xloil-stubs wheel, and runs the tests.
+#
+# Releasing: push a v* tag. The tag's run builds once and creates a *draft*
+# GitHub Release with the files; test them, then publish the draft
+# (gh release edit <tag> --draft=false). Nothing is built twice.
 
 on:
   push:
@@ -11,11 +14,28 @@ on:
       - 'feature/**'
     tags:
       - 'v*'
+    # Documentation-only changes don't need a build
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   workflow_dispatch:
+    inputs:
+      force_compile:
+        description: 'Compile the C++ even if it is unchanged (instead of reusing verified binaries)'
+        type: boolean
+        default: false
+
+# A newer push to the same branch cancels the older run (never for tags)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
-  PACKAGE_VERSION: 0.22.1.post1
+  PACKAGE_VERSION: 0.22.1.post2
 
 permissions:
   contents: read
@@ -34,6 +54,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: libs/xlOil_Python/Package/setup.py
       - name: Install test dependencies
         run: python -m pip install numpy tomlkit pandas polars matplotlib pytest
       - name: Run tests
@@ -73,7 +95,32 @@ jobs:
         with:
           submodules: recursive
 
+      # If the C++ is unchanged since the release in tools/native-binaries.json,
+      # reuse that release's verified binaries instead of compiling: a fresh
+      # unsigned build has a new file fingerprint, which Windows Defender's
+      # machine-learning check can falsely flag. It's also ~15 minutes faster.
+      - name: Reuse verified binaries if the C++ is unchanged
+        id: native
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ('${{ inputs.force_compile }}' -eq 'true') { "reuse=false" >> $env:GITHUB_OUTPUT; "Compile forced"; exit 0 }
+          $release = python tools/native_hash.py --check
+          if ($LASTEXITCODE -eq 0) {
+            gh release download $release --repo $env:GITHUB_REPOSITORY --pattern "*-x64-bin.zip" --dir build\reuse
+            if ($LASTEXITCODE -ne 0) { Write-Error "Could not download binaries from $release"; exit 1 }
+            Expand-Archive (Get-ChildItem build\reuse\*.zip | Select-Object -First 1).FullName -DestinationPath build\reuse
+            "reuse=true" >> $env:GITHUB_OUTPUT
+            Write-Host "C++ unchanged: reusing the verified binaries from $release"
+          } else {
+            "reuse=false" >> $env:GITHUB_OUTPUT
+            Write-Host "C++ changed: compiling"
+          }
+          exit 0
+
       - name: Download sqlite amalgamation
+        if: steps.native.outputs.reuse != 'true'
         shell: pwsh
         run: |
           Invoke-WebRequest -Uri https://www.sqlite.org/2022/sqlite-amalgamation-3390300.zip -OutFile external\sqlite.zip
@@ -81,18 +128,22 @@ jobs:
           Rename-Item -Path (Get-ChildItem -Directory external\sqlite-amalgamation*) -NewName "sqlite"
 
       - name: Extract bundled Python headers and libs
+        if: steps.native.outputs.reuse != 'true'
         shell: pwsh
         run: 7z x external\python.7z -oexternal -y
 
       # The COM code #imports the MSO, VBE, Excel and Add-in Designer type
-      # libraries, which only come with Office. Microsoft's download is flaky
+      # libraries, which only come with Office. Only Excel is installed (MSO and
+      # VBE come with it) to shorten the download. Microsoft's download is flaky
       # on CI runners, so retry.
-      - name: Install Office to get the Excel type libraries
+      - name: Install Excel to get the Office type libraries
+        if: steps.native.outputs.reuse != 'true'
         shell: pwsh
         timeout-minutes: 60
         run: |
+          $params = "'/exclude:Access Groove Lync OneDrive OneNote Outlook PowerPoint Publisher Teams Word /updates:FALSE'"
           for ($i = 1; $i -le 3; $i++) {
-            choco install office365business --no-progress -y
+            choco install office365business --no-progress -y --params $params
             if ($LASTEXITCODE -eq 0) { exit 0 }
             Write-Host "Office install attempt $i failed with $LASTEXITCODE, retrying in 60s"
             choco uninstall office365business -y --skip-autouninstaller 2>$null
@@ -101,25 +152,37 @@ jobs:
           exit 1
 
       - name: Set up MSBuild
+        if: steps.native.outputs.reuse != 'true'
         uses: microsoft/setup-msbuild@v2
 
       - name: Write version file
         shell: pwsh
         run: ./tools/WriteVersion.ps1
 
-      - name: Build solution (Release x64)
+      # Build only what ships (and the unit tests): skips the end-of-life
+      # Python 3.7/3.8 extensions, TestAddin and the docs/packaging projects
+      - name: Build add-in (Release x64)
+        if: steps.native.outputs.reuse != 'true'
         shell: pwsh
-        run: msbuild xlOil.sln /m /p:Configuration=Release /p:Platform=x64 /v:m
+        run: |
+          $targets = @(
+            'xlOil', 'xlOil-Loader', 'xlOil-XLL', 'UnitTests',
+            'libs\xlOil_Python', 'libs\xlOil_SQL', 'libs\xlOil_Utils',
+            'libs\xlOil_Python39', 'libs\xlOil_Python310', 'libs\xlOil_Python311',
+            'libs\xlOil_Python312', 'libs\xlOil_Python313', 'libs\xlOil_Python314'
+          ) -join ';'
+          msbuild xlOil.sln /m "/t:$targets" /p:Configuration=Release /p:Platform=x64 /v:m
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run C++ unit tests
+        if: steps.native.outputs.reuse != 'true'
         shell: pwsh
-        continue-on-error: true
         run: |
           $dll = Get-ChildItem build -Recurse -Filter UnitTests.dll | Select-Object -First 1
-          if ($dll) {
-            $vstest = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -find "**\vstest.console.exe" | Select-Object -First 1
-            & $vstest $dll.FullName
-          } else { Write-Host "UnitTests.dll not built in Release configuration" }
+          if (-not $dll) { Write-Error "UnitTests.dll was not built"; exit 1 }
+          $vstest = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -find "**\vstest.console.exe" | Select-Object -First 1
+          & $vstest $dll.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/setup-python@v5
         id: py39
@@ -143,13 +206,15 @@ jobs:
       - name: Package binaries and wheels
         shell: pwsh
         run: |
-          python tools/ci_package.py --version $env:PACKAGE_VERSION `
+          $bin = if ('${{ steps.native.outputs.reuse }}' -eq 'true') { 'build\reuse\x64' } else { 'build\x64\Release' }
+          python tools/ci_package.py --version $env:PACKAGE_VERSION --bin-dir $bin `
             --python "${{ steps.py39.outputs.python-path }}" `
             --python "${{ steps.py310.outputs.python-path }}" `
             --python "${{ steps.py311.outputs.python-path }}" `
             --python "${{ steps.py312.outputs.python-path }}" `
             --python "${{ steps.py313.outputs.python-path }}" `
             --python "${{ steps.py314.outputs.python-path }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Smoke test a wheel imports outside Excel
         shell: pwsh
@@ -169,7 +234,7 @@ jobs:
           path: build/dist/*
 
   release:
-    name: Publish GitHub Release
+    name: Create draft GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build-windows, stubs-wheel]
     runs-on: ubuntu-latest
@@ -181,16 +246,18 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Create release
+      - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          cp tools/install.ps1 dist/
           ls -l dist
-          # A release published by hand from verified artifacts is left untouched
+          # An existing release is left untouched
           if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
             echo "Release ${GITHUB_REF_NAME} already exists: not replacing its files"
             exit 0
           fi
-          gh release create "${GITHUB_REF_NAME}" dist/* \
+          # Created as a draft: test the files, then publish it
+          gh release create "${GITHUB_REF_NAME}" dist/* --draft \
             --title "xlOil ${GITHUB_REF_NAME} (PyXLL-parity fork)" \
             --notes-file CHANGELOG-fork.md

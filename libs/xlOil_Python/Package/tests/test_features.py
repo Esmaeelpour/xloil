@@ -705,3 +705,62 @@ def test_doctor_runs_without_excel(capsys):
     out = capsys.readouterr().out
     assert "xlOil doctor" in out
     assert isinstance(problems, int)
+
+
+# ---------------------------------------------------------------- features
+
+def test_feature_toggle_orders_and_keeps_shared_modules():
+    from xloil.features import find_feature, set_feature, feature_enabled
+    mods = ["xloil.xloil_ribbon", "mymodule"]
+    mods = set_feature(mods, find_feature("charts"), True)
+    mods = set_feature(mods, find_feature("qt"), True)
+    # Qt must load before plotting; user modules stay last
+    assert mods.index("xloil.gui.qtpy") < mods.index("xloil.plotting")
+    assert mods[0] == "xloil.xloil_ribbon" and mods[-1] == "mymodule"
+    # Turning charts off keeps plotting, which qt still needs
+    mods = set_feature(mods, find_feature("charts"), False)
+    assert "xloil.plotting" in mods and "xloil.matplotlib" not in mods
+    assert feature_enabled(find_feature("qt"), mods)
+    mods = set_feature(mods, find_feature("qt"), False)
+    assert "xloil.plotting" not in mods and "xloil.gui.qtpy" not in mods
+
+
+def test_feature_catalogue_modules_exist():
+    import importlib.util
+    from xloil.features import FEATURES
+    for f in FEATURES:
+        for m in f.modules:
+            assert importlib.util.find_spec(m) is not None, m
+
+
+def test_order_modules_dedupes():
+    from xloil.features import order_modules
+    assert order_modules(["a", "xloil.plotting", "xloil.gui.qtpy", "a"]) == \
+        ["xloil.gui.qtpy", "xloil.plotting", "a"]
+
+
+def test_setup_subcommand_registered(monkeypatch, capsys):
+    from xloil import command_line as cl
+    monkeypatch.setattr(sys, "argv", ["xloil", "setup", "--help"])
+    with pytest.raises(SystemExit):
+        cl.main()
+    out = capsys.readouterr().out
+    assert "--features" in out and "--yes" in out
+
+
+def test_install_dir_prefers_per_user_binaries(tmp_path, monkeypatch):
+    import importlib, site, xloil._paths as paths
+    prefix = tmp_path / "conda"; userbase = tmp_path / "user"
+    for base in (prefix, userbase):
+        (base / "share" / "xloil").mkdir(parents=True)
+        (base / "share" / "xloil" / "xlOil.xll").write_text("")
+    usersite = userbase / "site-packages"
+    monkeypatch.setattr(sys, "prefix", str(prefix))
+    monkeypatch.setattr(site, "getuserbase", lambda: str(userbase))
+    monkeypatch.setattr(site, "getusersitepackages", lambda: str(usersite))
+    # Package in the environment: the environment's binaries win
+    monkeypatch.setattr(paths, "__file__", str(prefix / "Lib" / "site-packages" / "xloil" / "_paths.py"))
+    assert paths._find_install_dir() == str(prefix / "share" / "xloil")
+    # Package installed per-user: the per-user binaries win
+    monkeypatch.setattr(paths, "__file__", str(usersite / "xloil" / "_paths.py"))
+    assert paths._find_install_dir() == str(userbase / "share" / "xloil")
