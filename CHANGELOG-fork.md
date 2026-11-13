@@ -4,6 +4,15 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post7
+
+Re-installing or upgrading no longer needs manual steps afterwards.
+
+- `xloil setup` keeps your own modules (anything in `LoadModules` that isn't part of
+  xlOil, e.g. `mytools`) when it rebuilds the list from the features you pick.
+- `install.ps1` checks for a running Excel before installing and waits for you to
+  close it, instead of failing part-way with `PermissionError`.
+
 ## 0.22.1.post6
 
 - Fixed: `xloil ribbon xlam` (and so `xloil setup` on computers with the

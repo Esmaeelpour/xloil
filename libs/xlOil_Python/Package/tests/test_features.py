@@ -964,3 +964,24 @@ def test_addins_must_be_signed_reads_policy(monkeypatch):
     assert cl.addins_must_be_signed(16) is False
     monkeypatch.setattr(cl, "reg", FakeReg({}))
     assert cl.addins_must_be_signed(16) is False
+
+
+def test_setup_keeps_user_modules(ini_copy, monkeypatch, capsys):
+    """ Re-running setup rebuilds LoadModules from the features but keeps your own modules """
+    from xloil import command_line as cl
+    cl.config_set("xlOil_Python.LoadModules", '["xloil.xloil_ribbon", "xloil.pandas", "mytools"]',
+                  ini=str(ini_copy))
+    assert cl._user_modules(str(ini_copy)) == ["mytools"]
+
+    captured = {}
+    monkeypatch.setattr(cl, "_user_modules", lambda ini=None, _f=cl._user_modules: _f(str(ini_copy)))
+    monkeypatch.setattr(cl, "_install_cmd", lambda load_modules=None, **kw: captured.setdefault("mods", load_modules))
+    monkeypatch.setattr(cl, "addins_must_be_signed", lambda version=None: True)
+    monkeypatch.setattr(cl, "ribbon", lambda kind, ini=None: captured.setdefault("ribbon", kind))
+    monkeypatch.setattr(cl, "_check_bitness", lambda: True)
+    monkeypatch.setattr(cl, "doctor", lambda: 0)
+    cl.setup(features="charts", yes=True, no_pip=True, intellisense=False)
+    mods = captured["mods"].split(",")
+    assert "mytools" in mods and mods[-1] == "mytools"
+    assert "xloil.xlam_ribbon" in mods and "xloil.xloil_ribbon" not in mods
+    assert captured["ribbon"] == "xlam"

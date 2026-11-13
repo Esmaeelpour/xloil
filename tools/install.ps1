@@ -130,6 +130,14 @@ Write-Host "Downloading $($asset.name) from release $($release.tag_name)"
 Retry { Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest -UseBasicParsing } "Download" | Out-Null
 }
 Unblock-File $dest
+
+# Excel locks xlOil's files while it runs, which makes the install fail part-way
+while (Get-Process EXCEL -ErrorAction SilentlyContinue) {
+    Write-Host "Excel is running. Close every Excel window (check Task Manager for EXCEL.EXE)," -ForegroundColor Yellow
+    if ($Yes) { Fail "Excel is running: close it and run the installer again." }
+    Read-Host "then press Enter to continue" | Out-Null
+}
+
 & $Python -m pip install --upgrade $dest
 if ($LASTEXITCODE -ne 0) { Fail "pip install failed" }
 
