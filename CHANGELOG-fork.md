@@ -4,6 +4,12 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post5
+
+- Fixed: `xloil setup` crashed with `ValueError: too many values to unpack` on
+  computers where the Office signed-add-ins policy is set (the case post4's `.xlam`
+  ribbon is for). The same mistake in the VBA-access check is fixed too.
+
 ## 0.22.1.post4
 
 The *xlOil Py* ribbon tab now works on computers whose Office policy requires signed

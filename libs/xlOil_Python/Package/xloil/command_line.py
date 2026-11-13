@@ -32,10 +32,10 @@ def _check_VBA_access(version):
 
     with suppress(OSError): 
         user_key = reg.OpenKey(reg.HKEY_CURRENT_USER, _excel_regpath(version) + r"\Security")
-        user_access, = reg.QueryValueEx(user_key, "AccessVBOM")
+        user_access, _ = reg.QueryValueEx(user_key, "AccessVBOM")
     with suppress(OSError):
         lm_key =  reg.OpenKey(reg.HKEY_LOCAL_MACHINE, _excel_regpath(version) + r"\Security")
-        lm_access, = reg.QueryValueEx(lm_key, "AccessVBOM")
+        lm_access, _ = reg.QueryValueEx(lm_key, "AccessVBOM")
 
     if user_access == 0 or lm_access == 0:
         print("To ensure xlOil local functions work, allow access to the VBA Object Model in\n" +
@@ -639,7 +639,7 @@ def addins_must_be_signed(version=None) -> bool:
         for base in (r"Software\Policies\Microsoft\Office", r"Software\Microsoft\Office"):
             with suppress(OSError):
                 key = reg.OpenKey(root, rf"{base}\{version}.0\Excel\Security")
-                value, = reg.QueryValueEx(key, "requireaddinsig")
+                value, _ = reg.QueryValueEx(key, "requireaddinsig")
                 if value == 1:
                     return True
     return False
