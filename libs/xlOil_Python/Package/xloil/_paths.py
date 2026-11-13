@@ -4,7 +4,27 @@ import os
 ADDIN_NAME        = "xlOil.xll"
 INIFILE_NAME      = "xlOil.ini"
 APP_DATA_DIR      = os.path.join(os.environ.get('APPDATA','.'), "xlOil")
-XLOIL_INSTALL_DIR = os.path.join(sys.prefix, "share", "xloil")
+def _find_install_dir():
+    """
+        The wheel puts the binaries in <prefix>/share/xloil. For a per-user install
+        (pip install --user, which pip does automatically when the environment is
+        not writable, e.g. a conda base in C:\\ProgramData) they go to
+        <user base>/share/xloil instead.
+    """
+    candidates = [os.path.join(sys.prefix, "share", "xloil")]
+    try:
+        import site
+        user_base = site.getuserbase()
+        if user_base:
+            candidates.append(os.path.join(user_base, "share", "xloil"))
+    except Exception:
+        pass
+    for path in candidates:
+        if os.path.exists(os.path.join(path, "xlOil.xll")):
+            return path
+    return candidates[0]
+
+XLOIL_INSTALL_DIR = _find_install_dir()
 XLOIL_BIN_DIR     = os.environ.get("XLOIL_BIN_DIR", XLOIL_INSTALL_DIR)
 
 class _SetPathContext:

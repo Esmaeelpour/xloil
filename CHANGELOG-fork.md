@@ -4,6 +4,40 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post2
+
+### Fixes
+- **Excel crashed at start-up** with Qt 5 (e.g. conda's PyQt5) on some graphics
+  drivers (seen with an AMD `atio6axx.dll` OpenGL driver). `xloil.gui.qtpy` turned on
+  Qt's OpenGL context sharing even when Qt WebEngine wasn't installed, which loaded
+  the vendor OpenGL driver into Excel. It's now only turned on when WebEngine is
+  installed, and Qt 5 then uses ANGLE (Direct3D) unless `QT_OPENGL` is set.
+- Choosing a conda environment in the ribbon now sets `PYTHONHOME`. Before, Python
+  failed to start after the restart.
+- xlOil finds its binaries when pip installed it per-user, which pip does when the
+  environment isn't writable (e.g. a conda base in C:\ProgramData).
+
+### Easier set-up
+- One-line installer: `install.ps1` is published with each release. It finds Python,
+  downloads the matching wheel, installs it and runs `xloil setup`.
+- `xloil setup`: guided set-up that asks which features you want, pip-installs their
+  libraries, installs the add-in and runs `xloil doctor`. `--features ... --yes`
+  makes it non-interactive.
+- Ribbon: a **Features** menu (checkboxes for pandas, polars, charts, Qt and
+  interactive charts, IntelliSense, saving the cache), with the modules added in the
+  right order and missing libraries greyed out with an install hint. Environment
+  entries show their Python version and whether xlOil is installed. New **Doctor**,
+  **Reload** and **Settings File** buttons.
+- `xloil.features.intellisense` and `xloil.features.cache_persist` turn those
+  features on just by being listed in LoadModules.
+
+### Build
+- CI builds only what ships, installs only Excel for the type libraries, cancels
+  superseded runs and skips docs-only changes. A release tag creates a *draft*
+  release from a single build; it's published after testing.
+- The binaries zip no longer includes extensions for Python 3.7 and 3.8, which are
+  end-of-life and had no wheels.
+
 ## 0.22.1.post1
 
 Based on upstream xlOil 0.22.1. The C++ add-in is unchanged. Everything below is in

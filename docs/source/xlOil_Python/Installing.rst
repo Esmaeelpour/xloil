@@ -21,8 +21,30 @@ Requirements
 The wheel pulls in its required packages automatically: ``numpy``, ``tomlkit`` and
 ``pywin32`` (used for the Excel object model).
 
-Install in three commands
--------------------------
+One-line install
+----------------
+
+Open PowerShell (if you use conda or a venv, activate the environment you want
+Excel to use first) and run:
+
+.. code-block:: powershell
+
+    powershell -ExecutionPolicy Bypass -c "irm https://github.com/Esmaeelpour/xloil/releases/latest/download/install.ps1 | iex"
+
+The installer:
+
+1. finds your Python (the active conda env or venv, otherwise ``py -3``, otherwise
+   ``python``) and checks it is 64-bit;
+2. downloads the matching wheel from the latest GitHub release and installs it;
+3. runs ``xloil setup``, which asks which features you want, pip-installs the
+   libraries they need, installs the Excel add-in and runs ``xloil doctor``.
+
+Restart Excel: the *xlOil Py* ribbon tab appears. To choose a Python or skip the
+questions, download ``install.ps1`` from the release and run e.g.
+``.\install.ps1 -Python C:\envs\risk\python.exe -Features pandas,charts,qt -Yes``.
+
+Install step by step
+--------------------
 
 Download the wheel for your Python version (``cp312`` = Python 3.12) from the
 `GitHub release <https://github.com/Esmaeelpour/xloil/releases>`_, then from a
@@ -30,13 +52,37 @@ command prompt *in the Python environment you want Excel to use*:
 
 .. code-block:: bat
 
-    pip install xloil-0.22.1.post1-cp312-cp312-win_amd64.whl
-    xloil install
-    xloil doctor
+    pip install xloil-0.22.1.post2-cp312-cp312-win_amd64.whl
+    xloil setup
 
-Start Excel. The *xlOil* ribbon tab appears.
+``xloil setup`` is the guided set-up. ``--features pandas,polars,charts,qt,intellisense,cache``
+and ``--yes`` make it non-interactive. If you prefer the individual steps:
+``xloil install``, then ``xloil doctor``.
 
-``xloil install``:
+If the environment isn't writable (for example a conda base installed for all users
+in ``C:\ProgramData``), pip installs for your user only. xlOil finds its files
+there too.
+
+Changing settings later
+-----------------------
+
+The *xlOil Py* ribbon tab holds the common settings, so you rarely need to edit
+``xlOil.ini``:
+
+* **Features** menu: tick pandas, polars, charts, Qt widgets and interactive charts,
+  IntelliSense, or saving cached objects. It adds the right modules to *Load
+  Modules* in the right order. Features whose libraries aren't installed are greyed
+  out, and their tooltip says what to ``pip install``.
+* **Environment**: pick another Python. Entries show the Python version and whether
+  xlOil is installed there. Picking a conda environment also sets ``PYTHONHOME``.
+* **Doctor**, **Reload** and **Settings File** buttons: check the installation,
+  reload your modules without restarting, or open ``xlOil.ini``.
+
+Changes to the environment, and turning features off, take effect after
+restarting Excel (the ribbon shows *Restart Required*).
+
+What ``xloil install`` does
+---------------------------
 
 * copies ``xlOil.xll`` into your XLSTART folder, so Excel loads it on start;
 * writes ``%APPDATA%\xlOil\xlOil.ini`` pointing at the Python that ran the
@@ -51,7 +97,7 @@ Optional extras install the libraries for particular features:
 
 .. code-block:: bat
 
-    pip install "xloil-0.22.1.post1-cp312-cp312-win_amd64.whl[all]"      :: everything below
+    pip install "xloil-0.22.1.post2-cp312-cp312-win_amd64.whl[all]"      :: everything below
     pip install "xloil-...whl[pandas]"      :: DataFrames
     pip install "xloil-...whl[polars]"      :: polars
     pip install "xloil-...whl[plotting]"    :: matplotlib, plotly, Qt WebEngine charts
@@ -68,7 +114,7 @@ environment*:
 
     conda create -n xl python=3.12 pandas
     conda activate xl
-    pip install xloil-0.22.1.post1-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post2-cp312-cp312-win_amd64.whl
     xloil install
 
 Unlike python.org installs, an embedded conda interpreter cannot find its

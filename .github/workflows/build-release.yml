@@ -1,8 +1,11 @@
 name: Build and release
 
 # Builds the xlOil add-in (Release x64), one Python wheel per supported Python
-# version and the pure-Python xloil-stubs wheel, runs the tests, and on a
-# version tag (v*) publishes everything as a GitHub Release.
+# version and the pure-Python xloil-stubs wheel, and runs the tests.
+#
+# Releasing: push a v* tag. The tag's run builds once and creates a *draft*
+# GitHub Release with the files; test them, then publish the draft
+# (gh release edit <tag> --draft=false). Nothing is built twice.
 
 on:
   push:
@@ -11,11 +14,23 @@ on:
       - 'feature/**'
     tags:
       - 'v*'
+    # Documentation-only changes don't need a build
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   workflow_dispatch:
 
+# A newer push to the same branch cancels the older run (never for tags)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 env:
-  PACKAGE_VERSION: 0.22.1.post1
+  PACKAGE_VERSION: 0.22.1.post2
 
 permissions:
   contents: read
@@ -34,6 +49,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: libs/xlOil_Python/Package/setup.py
       - name: Install test dependencies
         run: python -m pip install numpy tomlkit pandas polars matplotlib pytest
       - name: Run tests
@@ -85,14 +102,16 @@ jobs:
         run: 7z x external\python.7z -oexternal -y
 
       # The COM code #imports the MSO, VBE, Excel and Add-in Designer type
-      # libraries, which only come with Office. Microsoft's download is flaky
+      # libraries, which only come with Office. Only Excel is installed (MSO and
+      # VBE come with it) to shorten the download. Microsoft's download is flaky
       # on CI runners, so retry.
-      - name: Install Office to get the Excel type libraries
+      - name: Install Excel to get the Office type libraries
         shell: pwsh
         timeout-minutes: 60
         run: |
+          $params = "'/exclude:Access Groove Lync OneDrive OneNote Outlook PowerPoint Publisher Teams Word /updates:FALSE'"
           for ($i = 1; $i -le 3; $i++) {
-            choco install office365business --no-progress -y
+            choco install office365business --no-progress -y --params $params
             if ($LASTEXITCODE -eq 0) { exit 0 }
             Write-Host "Office install attempt $i failed with $LASTEXITCODE, retrying in 60s"
             choco uninstall office365business -y --skip-autouninstaller 2>$null
@@ -107,19 +126,28 @@ jobs:
         shell: pwsh
         run: ./tools/WriteVersion.ps1
 
-      - name: Build solution (Release x64)
+      # Build only what ships (and the unit tests): skips the end-of-life
+      # Python 3.7/3.8 extensions, TestAddin and the docs/packaging projects
+      - name: Build add-in (Release x64)
         shell: pwsh
-        run: msbuild xlOil.sln /m /p:Configuration=Release /p:Platform=x64 /v:m
+        run: |
+          $targets = @(
+            'xlOil', 'xlOil-Loader', 'xlOil-XLL', 'UnitTests',
+            'libs\xlOil_Python', 'libs\xlOil_SQL', 'libs\xlOil_Utils',
+            'libs\xlOil_Python39', 'libs\xlOil_Python310', 'libs\xlOil_Python311',
+            'libs\xlOil_Python312', 'libs\xlOil_Python313', 'libs\xlOil_Python314'
+          ) -join ';'
+          msbuild xlOil.sln /m "/t:$targets" /p:Configuration=Release /p:Platform=x64 /v:m
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run C++ unit tests
         shell: pwsh
-        continue-on-error: true
         run: |
           $dll = Get-ChildItem build -Recurse -Filter UnitTests.dll | Select-Object -First 1
-          if ($dll) {
-            $vstest = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -find "**\vstest.console.exe" | Select-Object -First 1
-            & $vstest $dll.FullName
-          } else { Write-Host "UnitTests.dll not built in Release configuration" }
+          if (-not $dll) { Write-Error "UnitTests.dll was not built"; exit 1 }
+          $vstest = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -find "**\vstest.console.exe" | Select-Object -First 1
+          & $vstest $dll.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/setup-python@v5
         id: py39
@@ -150,6 +178,7 @@ jobs:
             --python "${{ steps.py312.outputs.python-path }}" `
             --python "${{ steps.py313.outputs.python-path }}" `
             --python "${{ steps.py314.outputs.python-path }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Smoke test a wheel imports outside Excel
         shell: pwsh
@@ -169,7 +198,7 @@ jobs:
           path: build/dist/*
 
   release:
-    name: Publish GitHub Release
+    name: Create draft GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build-windows, stubs-wheel]
     runs-on: ubuntu-latest
@@ -181,16 +210,18 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Create release
+      - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          cp tools/install.ps1 dist/
           ls -l dist
-          # A release published by hand from verified artifacts is left untouched
+          # An existing release is left untouched
           if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
             echo "Release ${GITHUB_REF_NAME} already exists: not replacing its files"
             exit 0
           fi
-          gh release create "${GITHUB_REF_NAME}" dist/* \
+          # Created as a draft: test the files, then publish it
+          gh release create "${GITHUB_REF_NAME}" dist/* --draft \
             --title "xlOil ${GITHUB_REF_NAME} (PyXLL-parity fork)" \
             --notes-file CHANGELOG-fork.md

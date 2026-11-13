@@ -600,6 +600,90 @@ def _intellisense_cmd(action, target_dir=None):
             print(f"{path} not found")
 
 
+def _ask(question: str, default: bool, assume_yes: bool) -> bool:
+    if assume_yes:
+        return default
+    hint = "[Y/n]" if default else "[y/N]"
+    while True:
+        try:
+            answer = input(f"{question} {hint} ").strip().lower()
+        except EOFError:
+            return default
+        if not answer:
+            return default
+        if answer in ("y", "yes"):
+            return True
+        if answer in ("n", "no"):
+            return False
+
+
+def setup(features: str = None, yes: bool = False, no_pip: bool = False, intellisense: bool = None):
+    """
+        Guided first-time set-up: choose features, install the libraries they
+        need, install the add-in with the right LoadModules, then check everything.
+        Non-interactive: ``xloil setup --features pandas,charts,qt --yes``.
+    """
+    import subprocess
+    from .features import FEATURES, find_feature, feature_available, order_modules
+
+    print("xlOil setup\n")
+    print(f"Python: {sys.executable} ({sys.version.split()[0]})")
+    home = python_home_for(sys.executable)
+    if home:
+        print(f"Conda installation detected ({home}): PYTHONHOME will be set automatically")
+    if not _check_bitness():
+        print("Fix the bitness mismatch first, then run `xloil setup` again.")
+        return 1
+    print()
+
+    if features is not None:
+        chosen = [find_feature(k.strip()) for k in features.split(",") if k.strip()]
+    else:
+        defaults = {"pandas", "charts"}
+        chosen = []
+        print("Choose features (Enter accepts the default):")
+        for f in FEATURES:
+            default = f.key in defaults and (feature_available(f) or bool(f.pip))
+            installed = "" if feature_available(f) or not f.pip else f"  [will pip install {f.pip}]"
+            if _ask(f"  {f.label}: {f.description}{installed}?", default, yes):
+                chosen.append(f)
+        print()
+
+    missing = sorted({pkg for f in chosen if not feature_available(f) and f.pip
+                      for pkg in f.pip.split()})
+    if missing and not no_pip:
+        print(f"Installing: {' '.join(missing)}")
+        result = subprocess.run([sys.executable, "-m", "pip", "install", *missing])
+        if result.returncode != 0:
+            print("WARNING: pip install failed; those features will not work until the "
+                  "packages are installed")
+        print()
+
+    modules = ["xloil.xloil_ribbon"]
+    for f in chosen:
+        modules += list(f.modules)
+    modules = order_modules(modules)
+
+    _install_cmd(load_modules=",".join(modules))
+
+    want_isense = intellisense
+    if want_isense is None:
+        want_isense = any(f.key == "intellisense" for f in chosen) and \
+            _ask("Download the Excel-DNA IntelliSense add-in from GitHub?", True, yes)
+    if want_isense:
+        try:
+            _intellisense_cmd('install')
+        except Exception as e:
+            print(f"WARNING: IntelliSense add-in not installed: {e}")
+
+    print()
+    problems = doctor()
+    print("\nDone. Start (or restart) Excel: the 'xlOil Py' ribbon tab lets you change "
+          "features later." if not problems else
+          "\nSet-up finished with problems: see the messages above.")
+    return problems
+
+
 def doctor():
     """
         Checks the things which most often stop xlOil loading on a new computer
@@ -744,6 +828,16 @@ def main():
 
     p = subparsers.add_parser('doctor', help='Checks for common problems which stop xlOil loading')
     p.set_defaults(func=doctor)
+
+    p = subparsers.add_parser('setup', help='Guided first-time set-up: pick features, install what they '
+                                            'need, install the add-in and check it')
+    p.add_argument("--features", default=None,
+                   help='Comma-separated features, skipping the questions: '
+                        'pandas,polars,charts,qt,intellisense,cache')
+    p.add_argument("--yes", "-y", action='store_true', help='Accept the defaults without asking')
+    p.add_argument("--no-pip", dest="no_pip", action='store_true',
+                   help="Don't pip install the libraries features need")
+    p.set_defaults(func=setup)
 
     p = subparsers.add_parser('config', help='Reads or changes settings in xlOil.ini')
     config_sub = p.add_subparsers()
