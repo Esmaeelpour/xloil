@@ -58,7 +58,7 @@ jobs:
       - run:
           name: Install Python versions
           command: |
-            choco install python39 python310 python311 python312 python313 --no-progress -y
+            choco install python39 python310 python311 python312 python313 python314 --no-progress -y
       - run:
           name: Build solution (Release x64)
           command: |

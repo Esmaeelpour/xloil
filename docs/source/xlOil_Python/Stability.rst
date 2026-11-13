@@ -22,7 +22,7 @@ Compatibility
   :doc:`NewFeatures` are not removed or changed incompatibly. Deprecations get
   a ``DeprecationWarning`` for at least one release before removal.
 * **Platforms.** Windows x64, Excel 2013 or later (Microsoft 365 recommended),
-  and Python 3.9 to 3.13 wheels. Stub mode (for tests) runs on any OS. The
+  and Python 3.9 to 3.14 wheels. Stub mode (for tests) runs on any OS. The
   32-bit build is not produced by CI; build it locally with ``tools/stage.py``.
 
 Quality checks

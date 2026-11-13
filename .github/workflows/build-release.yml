@@ -138,6 +138,9 @@ jobs:
       - uses: actions/setup-python@v5
         id: py313
         with: { python-version: '3.13' }
+      - uses: actions/setup-python@v5
+        id: py314
+        with: { python-version: '3.14' }
 
       - name: Package binaries and wheels
         shell: pwsh
@@ -147,7 +150,8 @@ jobs:
             --python "${{ steps.py310.outputs.python-path }}" `
             --python "${{ steps.py311.outputs.python-path }}" `
             --python "${{ steps.py312.outputs.python-path }}" `
-            --python "${{ steps.py313.outputs.python-path }}"
+            --python "${{ steps.py313.outputs.python-path }}" `
+            --python "${{ steps.py314.outputs.python-path }}"
 
       - name: Smoke test a wheel imports outside Excel
         shell: pwsh

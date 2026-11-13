@@ -63,6 +63,6 @@ the `xloil` Python package and is opt-in.
 
 ### Build and release
 - A GitHub Actions workflow (`build-release.yml`) builds Release x64, wheels for
-  Python 3.9 to 3.13 and the stubs wheel, runs the tests, and publishes a GitHub
+  Python 3.9 to 3.14 and the stubs wheel, runs the tests, and publishes a GitHub
   Release on `v*` tags. A CircleCI config mirrors it as a fallback.
 - The upstream GitLab mirror workflow now only runs in the upstream repository.
