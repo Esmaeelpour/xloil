@@ -75,6 +75,9 @@ After ``pip install`` of the wheel:
     xloil config set xlOil_Python.LoadModules "['xloil.xloil_ribbon', 'mymod']"
     xloil config set Addin.LogLevel "'info'"
     xloil config python C:\envs\risk\.venv       :: switch interpreter later
+    xloil config add-path C:\work\xlo            :: folder holding your own modules
+    xloil config add-module mytools             :: load your module (kept in load order)
+    xloil config remove-module xloil.xloil_ribbon
     xloil remove                                :: remove the add-in, keep settings
     xloil clean                                 :: remove add-in, settings and package
 
@@ -153,7 +156,7 @@ to Excel. This is enough to unit test add-in code in any CI system.
 
 .. code-block:: bash
 
-    pip install xloil_stubs-0.22.1.post2-py3-none-any.whl numpy pytest
+    pip install xloil_stubs-0.22.1.post3-py3-none-any.whl numpy pytest
     pytest
 
 ``xloil.testing``

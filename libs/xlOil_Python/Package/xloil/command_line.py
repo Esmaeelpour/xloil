@@ -470,12 +470,48 @@ def _parse_value(text: str):
         return text
 
 
-def config_get(key: str, ini: str = None):
-    """ Prints the value of a setting, e.g. ``xloil config get xlOil_Python.LoadModules`` """
-    _, doc = _load_ini(ini)
+# Settings which must be lists of strings: catching a typo here stops xlOil
+# failing to load at the next Excel start
+_LIST_SETTINGS = {"LoadModules", "Plugins", "DateFormats", "AutoReloadExcludePaths"}
+
+
+def _is_table_array(node) -> bool:
+    return isinstance(node, list) and len(node) > 0 and all(hasattr(x, "items") for x in node)
+
+
+def _resolve(doc, parts, create=False):
+    """
+        Walks `parts` (all but the final key) through the settings document and
+        returns the table that holds the final key. Arrays of tables, such as the
+        [[xlOil_Python.Environment]] blocks, are searched for the table that
+        already contains the final key (or indexed with a number, e.g.
+        Environment.0). If no table has the key, the last one is used.
+    """
+    import tomlkit
     node = doc
-    for part in _split_key(key):
+    path, final = parts[:-1], parts[-1]
+    for i, part in enumerate(path):
+        if _is_table_array(node):
+            node = node[int(part)]
+            continue
+        if part not in node:
+            if not create:
+                raise KeyError(".".join(parts[:i + 1]))
+            node[part] = tomlkit.table()
         node = node[part]
+    if _is_table_array(node):
+        node = next((t for t in node if final in t), node[-1])
+    return node, final
+
+
+def config_get(key: str, ini: str = None):
+    """
+        Prints the value of a setting, e.g. ``xloil config get xlOil_Python.LoadModules``
+        or ``xloil config get xlOil_Python.Environment.XLOIL_PYTHON_PATH``
+    """
+    _, doc = _load_ini(ini)
+    table, final = _resolve(doc, _split_key(key))
+    node = table[final]
     print(node.as_string() if hasattr(node, "as_string") else node)
 
 
@@ -483,18 +519,64 @@ def config_set(key: str, value: str, ini: str = None):
     """
         Sets a setting, preserving comments and layout, e.g.
         ``xloil config set xlOil_Python.LoadModules "['xloil.xloil_ribbon', 'mymod']"``
+        ``xloil config set Addin.LogLevel "'info'"``
     """
-    import tomlkit
     path, doc = _load_ini(ini)
     parts = _split_key(key)
-    node = doc
-    for part in parts[:-1]:
-        if part not in node:
-            node[part] = tomlkit.table()
-        node = node[part]
-    node[parts[-1]] = _parse_value(value)
-    path.write_text(tomlkit.dumps(doc), encoding='utf-8')
-    print(f"Set {key} = {node[parts[-1]]!r} in {path}")
+    parsed = _parse_value(value)
+    if parts[-1] in _LIST_SETTINGS and not (
+            isinstance(parsed, list) and all(isinstance(x, str) for x in parsed)):
+        raise ValueError(f"{parts[-1]} must be a list of names in square brackets, e.g. "
+                         f"\"['xloil.xloil_ribbon', 'mymodule']\". Got: {value}")
+    table, final = _resolve(doc, parts, create=True)
+    table[final] = parsed
+    path.write_text(_dumps(doc), encoding='utf-8')
+    print(f"Set {key} = {table[final]!r} in {path}")
+
+
+def _dumps(doc) -> str:
+    import tomlkit
+    return tomlkit.dumps(doc)
+
+
+def _edit_load_modules(ini, change):
+    from .features import order_modules
+    path, doc = _load_ini(ini)
+    table, final = _resolve(doc, ["xlOil_Python", "LoadModules"], create=True)
+    before = [str(m) for m in table.get(final, [])]
+    after = order_modules(change(before))
+    table[final] = after
+    path.write_text(_dumps(doc), encoding='utf-8')
+    print(f"LoadModules = {after}\nRestart Excel to apply.")
+
+
+def config_add_module(module: str, ini: str = None):
+    """ Adds a module to LoadModules (kept in dependency order), e.g. your own module """
+    _edit_load_modules(ini, lambda mods: mods + [module] if module not in mods else mods)
+
+
+def config_remove_module(module: str, ini: str = None):
+    """ Removes a module from LoadModules """
+    _edit_load_modules(ini, lambda mods: [m for m in mods if m != module])
+
+
+def config_add_path(folder: str, ini: str = None):
+    """
+        Adds a folder to xlOil's Python module search path (XLOIL_PYTHON_PATH),
+        e.g. the folder holding your own modules listed in LoadModules.
+    """
+    folder = str(Path(folder).expanduser().resolve())
+    if not Path(folder).is_dir():
+        raise FileNotFoundError(f"{folder} is not a folder")
+    path, doc = _load_ini(ini)
+    table, final = _resolve(doc, ["xlOil_Python", "Environment", "XLOIL_PYTHON_PATH"], create=True)
+    current = [p for p in str(table.get(final, "")).split(";") if p.strip()]
+    if any(os.path.normcase(p) == os.path.normcase(folder) for p in current):
+        print(f"{folder} is already on the search path")
+        return
+    table[final] = ";".join(current + [folder])
+    path.write_text(_dumps(doc), encoding='utf-8')
+    print(f"Added {folder} to the search path in {path}. Restart Excel to use it.")
 
 
 def config_list(ini: str = None):
@@ -588,8 +670,15 @@ def _intellisense_cmd(action, target_dir=None):
     from .intellisense import install_intellisense_addin, default_xll_name
     if action == 'install':
         install_intellisense_addin(target_dir)
-        print("Enable descriptions by adding 'xloil.intellisense' to LoadModules or calling "
-              "xloil.intellisense.enable() in a startup script, then restart Excel")
+        try:
+            _, doc = _load_ini()
+            enabled = "xloil.features.intellisense" in list(doc["xlOil_Python"]["LoadModules"])
+        except Exception:
+            enabled = False
+        if not enabled:
+            print("To show descriptions, turn on IntelliSense in the ribbon's Features menu, or run:\n"
+                  "  xloil config add-module xloil.features.intellisense\n"
+                  "then restart Excel")
     elif action == 'remove':
         path = Path(target_dir or _XL_START_PATH) / default_xll_name()
         if path.exists():
@@ -856,6 +945,18 @@ def main():
     c.add_argument("python")
     c.add_argument("--ini", default=None)
     c.set_defaults(func=_set_python_executable)
+    c = config_sub.add_parser('add-module', help='Adds a module to LoadModules, e.g. your own module')
+    c.add_argument("module")
+    c.add_argument("--ini", default=None)
+    c.set_defaults(func=config_add_module)
+    c = config_sub.add_parser('remove-module', help='Removes a module from LoadModules')
+    c.add_argument("module")
+    c.add_argument("--ini", default=None)
+    c.set_defaults(func=config_remove_module)
+    c = config_sub.add_parser('add-path', help='Adds a folder of your own Python modules to the search path')
+    c.add_argument("folder")
+    c.add_argument("--ini", default=None)
+    c.set_defaults(func=config_add_path)
 
     p = subparsers.add_parser('intellisense',
                               help='Installs or removes the Excel-DNA IntelliSense add-in '
