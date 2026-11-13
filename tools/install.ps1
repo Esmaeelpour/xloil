@@ -25,12 +25,16 @@
     Accept setup's defaults without asking.
 .PARAMETER Version
     Release tag to install, e.g. v0.22.1.post2. Default: the latest release.
+.PARAMETER Wheel
+    Install this already-downloaded wheel file instead of downloading one
+    (for offline or locked-down computers).
 #>
 param(
     [string]$Python = "",
     [string]$Features = "",
     [switch]$Yes,
-    [string]$Version = "latest"
+    [string]$Version = "latest",
+    [string]$Wheel = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,6 +61,14 @@ $pyTag, $bits = $info.Trim().Split(" ")
 Write-Host "Using Python: $Python (cp$pyTag, $bits-bit)"
 if ($bits -ne "64") { Fail "xlOil needs a 64-bit Python (and 64-bit Excel)." }
 
+if ($Wheel) {
+    if (-not (Test-Path $Wheel)) { Fail "Wheel file not found: $Wheel" }
+    if ((Split-Path $Wheel -Leaf) -notmatch "-cp$pyTag-cp$pyTag-win_amd64\.whl$") {
+        Fail "$(Split-Path $Wheel -Leaf) is not built for this Python (cp$pyTag, 64-bit)"
+    }
+    $dest = (Resolve-Path $Wheel).Path
+} else {
+
 # 2. Find the matching wheel in the release
 $api = if ($Version -eq "latest") { "https://api.github.com/repos/$Repo/releases/latest" } else { "https://api.github.com/repos/$Repo/releases/tags/$Version" }
 try { $release = Invoke-RestMethod -Uri $api -Headers @{ "User-Agent" = "xloil-installer" } }
@@ -72,6 +84,7 @@ if (-not $wheel) {
 $dest = Join-Path $env:TEMP $wheel.name
 Write-Host "Downloading $($wheel.name) from release $($release.tag_name)"
 Invoke-WebRequest -Uri $wheel.browser_download_url -OutFile $dest -UseBasicParsing
+}
 Unblock-File $dest
 & $Python -m pip install --upgrade $dest
 if ($LASTEXITCODE -ne 0) { Fail "pip install failed" }

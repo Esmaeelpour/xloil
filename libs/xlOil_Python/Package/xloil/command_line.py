@@ -283,9 +283,9 @@ def install_xloil(ini_template:str=None,
     # Check access to the VBA Object model (for local functions)
     _check_VBA_access(excel_version)
 
-    # Ensure XLSTART dir really exists
-    with suppress(FileExistsError):
-        os.mkdir(_XL_START_PATH)
+    # Ensure XLSTART dir really exists (its parents too: on a new user profile
+    # where Excel has never run, %APPDATA%\Microsoft\Excel doesn't exist yet)
+    _XL_START_PATH.mkdir(parents=True, exist_ok=True)
 
     bin_dir = _get_xloil_bin_dir()
 
@@ -303,8 +303,7 @@ def install_xloil(ini_template:str=None,
     if not replace_ini and ini_path.exists():
         print("Found existing settings file at \n", ini_path)
     else:
-        with suppress(FileExistsError):
-            ini_path.parent.mkdir()
+        ini_path.parent.mkdir(parents=True, exist_ok=True)
         sh.copy(ini_template or bin_dir / INIFILE_NAME, ini_path)
 
     # Edit the xloil.ini file. To preserve comments and whitespace it's easier to just use
