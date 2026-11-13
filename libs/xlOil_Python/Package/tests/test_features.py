@@ -764,3 +764,41 @@ def test_install_dir_prefers_per_user_binaries(tmp_path, monkeypatch):
     # Package installed per-user: the per-user binaries win
     monkeypatch.setattr(paths, "__file__", str(usersite / "xloil" / "_paths.py"))
     assert paths._find_install_dir() == str(userbase / "share" / "xloil")
+
+
+# ------------------------------------------------------------ config commands
+
+def test_config_env_table_keys(ini_copy, tmp_path, capsys):
+    from xloil import command_line as cl
+    import tomlkit
+    cl.config_set("xlOil_Python.Environment.XLOIL_PYTHON_PATH", "'C:/mine'", ini=str(ini_copy))
+    capsys.readouterr()
+    cl.config_get("xlOil_Python.Environment.XLOIL_PYTHON_PATH", ini=str(ini_copy))
+    assert "C:/mine" in capsys.readouterr().out
+    folder = tmp_path / "mods"; folder.mkdir()
+    cl.config_add_path(str(folder), ini=str(ini_copy))
+    cl.config_add_path(str(folder), ini=str(ini_copy))   # no duplicate
+    doc = tomlkit.parse(ini_copy.read_text(encoding="utf-8"))
+    env = [t for t in doc["xlOil_Python"]["Environment"] if "XLOIL_PYTHON_PATH" in t][0]
+    assert str(env["XLOIL_PYTHON_PATH"]).split(";") == ["C:/mine", str(folder.resolve())]
+
+
+def test_config_rejects_non_list_modules(ini_copy):
+    from xloil import command_line as cl
+    with pytest.raises(ValueError):
+        cl.config_set("xlOil_Python.LoadModules", "[...]", ini=str(ini_copy))
+    with pytest.raises(ValueError):
+        cl.config_set("xlOil_Python.LoadModules", "mymodule", ini=str(ini_copy))
+
+
+def test_config_add_remove_module(ini_copy):
+    from xloil import command_line as cl
+    import tomlkit
+    cl.config_add_module("mytools", ini=str(ini_copy))
+    cl.config_add_module("xloil.gui.qtpy", ini=str(ini_copy))
+    cl.config_add_module("mytools", ini=str(ini_copy))
+    mods = list(tomlkit.parse(ini_copy.read_text(encoding="utf-8"))["xlOil_Python"]["LoadModules"])
+    assert mods == ["xloil.xloil_ribbon", "xloil.gui.qtpy", "mytools"]
+    cl.config_remove_module("xloil.xloil_ribbon", ini=str(ini_copy))
+    mods = list(tomlkit.parse(ini_copy.read_text(encoding="utf-8"))["xlOil_Python"]["LoadModules"])
+    assert mods == ["xloil.gui.qtpy", "mytools"]

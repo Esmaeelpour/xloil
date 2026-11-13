@@ -60,15 +60,44 @@ function Retry([scriptblock]$Action, [string]$What) {
 # TLS 1.2 for older Windows PowerShell defaults
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 
-# 1. Find Python
-if (-not $Python) {
-    if ($env:CONDA_PREFIX -and (Test-Path "$env:CONDA_PREFIX\python.exe")) { $Python = "$env:CONDA_PREFIX\python.exe" }
-    elseif ($env:VIRTUAL_ENV -and (Test-Path "$env:VIRTUAL_ENV\Scripts\python.exe")) { $Python = "$env:VIRTUAL_ENV\Scripts\python.exe" }
-    elseif (Get-Command py -ErrorAction SilentlyContinue) { $Python = (& py -3 -c "import sys; print(sys.executable)") }
-    elseif (Get-Command python -ErrorAction SilentlyContinue) { $Python = (& python -c "import sys; print(sys.executable)") }
+# 1. Find a Python that actually starts. Try the active conda env / venv, then
+#    the py launcher, then python on PATH, and report why any candidate failed.
+function Probe([string]$Exe, [string[]]$PreArgs) {
+    # Windows PowerShell turns a native program's error output into a fatal error
+    # when ErrorActionPreference is Stop: relax it so failures can be reported
+    $ErrorActionPreference = "Continue"
+    $out = & $Exe @PreArgs -c "import sys; print(sys.executable)" 2>&1 | ForEach-Object { "$_" }
+    if ($LASTEXITCODE -eq 0 -and $out) { return @{ ok = $true; exe = ($out | Select-Object -Last 1).Trim() } }
+    return @{ ok = $false; why = (($out | Where-Object { $_ -match 'Error|error|not found|No module' } | Select-Object -First 2) -join " / ") }
+}
+
+$failures = @()
+if ($Python) {
+    $r = Probe $Python @()
+    if (-not $r.ok) { $failures += "$Python : $($r.why)" } else { $Python = $r.exe }
+} else {
+    $candidates = @()
+    if ($env:CONDA_PREFIX -and (Test-Path "$env:CONDA_PREFIX\python.exe")) { $candidates += ,@("$env:CONDA_PREFIX\python.exe", @()) }
+    if ($env:VIRTUAL_ENV -and (Test-Path "$env:VIRTUAL_ENV\Scripts\python.exe")) { $candidates += ,@("$env:VIRTUAL_ENV\Scripts\python.exe", @()) }
+    if (Get-Command py -ErrorAction SilentlyContinue) { $candidates += ,@("py", @("-3")) }
+    if (Get-Command python -ErrorAction SilentlyContinue) { $candidates += ,@("python", @()) }
+    foreach ($c in $candidates) {
+        $r = Probe $c[0] $c[1]
+        if ($r.ok) { $Python = $r.exe; break }
+        $failures += "$($c[0]) $($c[1] -join ' '): $($r.why)"
+    }
 }
 if (-not $Python -or -not (Test-Path $Python)) {
-    Fail "No Python found. Install 64-bit Python 3.9-3.14 from https://www.python.org or Miniconda, then run this again (or pass -Python <path to python.exe>)."
+    $msg = "No working Python found."
+    if ($failures) { $msg += "`n  Tried:`n    " + ($failures -join "`n    ") }
+    if ($env:PYTHONHOME -or $env:PYTHONPATH) {
+        $msg += "`n  PYTHONHOME/PYTHONPATH are set ('$env:PYTHONHOME' / '$env:PYTHONPATH'): these often stop Python " +
+                "starting ('No module named encodings'). Clear them for this window with:`n" +
+                "    Remove-Item Env:PYTHONHOME, Env:PYTHONPATH -ErrorAction SilentlyContinue"
+    }
+    $msg += "`n  Or open an Anaconda Prompt / activate your venv first, or pass -Python <path to python.exe>," +
+            "`n  or install 64-bit Python 3.9-3.14 from https://www.python.org (no admin needed)."
+    Fail $msg
 }
 
 $info = & $Python -c "import sys, struct; print(str(sys.version_info[0]) + str(sys.version_info[1]), struct.calcsize('P') * 8)"
