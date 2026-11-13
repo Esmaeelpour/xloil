@@ -15,6 +15,46 @@ from xloil._core import XLOIL_EMBEDDED
 import threading
 from pathlib import Path
 
+def _webengine_installed() -> bool:
+    """ Checks for Qt WebEngine *without* importing it (importing initialises OpenGL) """
+    import importlib.util
+    try:
+        import qtpy
+        return importlib.util.find_spec(f"{qtpy.API_NAME}.QtWebEngineWidgets") is not None
+    except Exception:
+        return False
+
+
+def _prepare_webengine():
+    """
+        Qt WebEngine (used by xloil.plotting for interactive charts) must be imported,
+        and OpenGL context sharing enabled, *before* the QApplication is created.
+
+        Context sharing makes Qt create an OpenGL context at start-up. With Qt 5's
+        default "desktop" OpenGL that loads the graphics card's OpenGL driver into
+        Excel, and some drivers (e.g. older AMD atio6axx.dll) crash Excel on start.
+        So this only happens when WebEngine is actually installed, and on Qt 5 it
+        selects ANGLE (OpenGL over Direct3D), which avoids the vendor OpenGL driver,
+        unless QT_OPENGL is already set. Set XLOIL_QT_NO_WEBENGINE=1 to skip all this.
+    """
+    if os.environ.get("XLOIL_QT_NO_WEBENGINE"):
+        return
+    if not _webengine_installed():
+        log.debug("Qt WebEngine not installed: interactive charts unavailable")
+        return
+    try:
+        import qtpy
+        from qtpy.QtCore import Qt, QCoreApplication
+        qt_major = int(str(getattr(qtpy, "QT_VERSION", "6")).split(".")[0] or 6)
+        if qt_major < 6 and not os.environ.get("QT_OPENGL"):
+            os.environ["QT_OPENGL"] = "angle"
+        QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
+        from qtpy import QtWebEngineWidgets  # noqa: F401
+        log.info("Qt WebEngine available")
+    except Exception as e:
+        log.debug(f"Qt WebEngine not available: {e}")
+
+
 def _create_Qt_app():
 
     from qtpy import QtCore
@@ -41,17 +81,7 @@ def _create_Qt_app():
 
     from qtpy.QtWidgets import QApplication
 
-    # Qt WebEngine (used by xloil.plotting for interactive charts) must be imported
-    # and OpenGL context sharing enabled *before* the QApplication is created.
-    # Set XLOIL_QT_NO_WEBENGINE=1 to skip this.
-    if not os.environ.get("XLOIL_QT_NO_WEBENGINE"):
-        try:
-            from qtpy.QtCore import Qt, QCoreApplication
-            QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
-            from qtpy import QtWebEngineWidgets  # noqa: F401
-            log.info("Qt WebEngine available")
-        except Exception as e:
-            log.debug(f"Qt WebEngine not available: {e}")
+    _prepare_webengine()
     
     #
     # Attempt to workaround an apparent oversight in Qt initialisation on Windows.
