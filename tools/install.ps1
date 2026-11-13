@@ -113,21 +113,32 @@ if ($Wheel) {
     $dest = (Resolve-Path $Wheel).Path
 } else {
 
-# 2. Find the matching wheel in the release
-$api = if ($Version -eq "latest") { "https://api.github.com/repos/$Repo/releases/latest" } else { "https://api.github.com/repos/$Repo/releases/tags/$Version" }
-try { $release = Retry { Invoke-RestMethod -Uri $api -Headers @{ "User-Agent" = "xloil-installer" } } "Reading the release" }
-catch { Fail "Could not read release '$Version' from GitHub: $($_.Exception.Message)" }
-
-$asset = $release.assets | Where-Object { $_.name -match "^xloil-.*-cp$pyTag-cp$pyTag-win_amd64\.whl$" } | Select-Object -First 1
-if (-not $asset) {
-    $tags = ($release.assets | Where-Object { $_.name -match "-cp(\d+)-" } | ForEach-Object { $Matches[1] }) -join ", "
-    Fail "Release $($release.tag_name) has no wheel for Python cp$pyTag. Available: $tags"
+# 2. Work out the release tag. This avoids api.github.com, which company
+#    networks often block or rate-limit (403): github.com/<repo>/releases/latest
+#    redirects to .../releases/tag/<tag>, so read the tag from that redirect.
+$tag = $Version
+if ($Version -eq "latest") {
+    try {
+        $tag = Retry {
+            $req = [System.Net.HttpWebRequest]::Create("https://github.com/$Repo/releases/latest")
+            $req.AllowAutoRedirect = $false
+            $req.UserAgent = "xloil-installer"
+            $resp = $req.GetResponse()
+            try { $loc = $resp.Headers["Location"] } finally { $resp.Close() }
+            if ($loc -notmatch "/releases/tag/([^/?#]+)") { throw "unexpected redirect '$loc'" }
+            $Matches[1]
+        } "Finding the latest release"
+    } catch { Fail "Could not find the latest release on github.com: $($_.Exception.Message)`n  Pass -Version v0.22.1.postN, or download the wheel in a browser and pass -Wheel <file>." }
 }
 
-# 3. Download and install it
-$dest = Join-Path $env:TEMP $asset.name
-Write-Host "Downloading $($asset.name) from release $($release.tag_name)"
-Retry { Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest -UseBasicParsing } "Download" | Out-Null
+# 3. Download the wheel for this Python and install it
+$ver = $tag -replace '^v', ''
+$name = "xloil-$ver-cp$pyTag-cp$pyTag-win_amd64.whl"
+$url = "https://github.com/$Repo/releases/download/$tag/$name"
+$dest = Join-Path $env:TEMP $name
+Write-Host "Downloading $name from release $tag"
+try { Retry { Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing } "Download" | Out-Null }
+catch { Fail "Could not download $url : $($_.Exception.Message)`n  (Release $tag may have no wheel for Python cp${pyTag}: see https://github.com/$Repo/releases/tag/$tag)" }
 }
 Unblock-File $dest
 

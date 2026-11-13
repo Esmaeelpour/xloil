@@ -4,6 +4,12 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post8
+
+- `install.ps1` no longer uses GitHub's API (api.github.com), which company networks
+  often block or rate-limit, so the installer stopped with `(403) Forbidden`. It now
+  reads the latest release from github.com itself and downloads the wheel directly.
+
 ## 0.22.1.post7
 
 Re-installing or upgrading no longer needs manual steps afterwards.
