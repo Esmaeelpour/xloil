@@ -21,8 +21,32 @@ from .importer import (
 from .com import (
     constants,
     PauseExcel,
+    MacroContext,
     fix_name_errors
     )
+
+from .importer import reload
+
+from .formatting import (
+    Formatter,
+    DataFrameFormatter,
+    ConditionalFormatter,
+    DateFormatter,
+    NumberFormatter,
+    )
+
+from .lru import lru_cache
+
+from .tables import (
+    Table,
+    TableReturn,
+    read_table,
+    write_table,
+    )
+
+from .metadata import workbook_metadata, WorkbookMetadata
+
+from .menus import context_menu, menu
 
 from .rtd import RtdSimplePublisher
 
@@ -52,3 +76,22 @@ try:
         app = impl.app
 except NameError:
     ... # Not in an ipython kernel
+
+# Names which pull in heavier dependencies (plotting libraries, ctypes Win32 
+# bindings) are loaded on first use
+_LAZY_ATTRS = {
+    'plot': ('xloil.plotting', 'plot'),
+    'register_plot_type': ('xloil.plotting', 'register_plot_type'),
+    'set_plot_mode': ('xloil.plotting', 'set_plot_mode'),
+    'SheetControl': ('xloil.gui.sheet_control', 'SheetControl'),
+    'place_control': ('xloil.gui.sheet_control', 'place_control'),
+}
+
+def __getattr__(name):
+    target = _LAZY_ATTRS.get(name)
+    if target is None:
+        raise AttributeError(f"module 'xloil' has no attribute '{name}'")
+    import importlib
+    value = getattr(importlib.import_module(target[0]), target[1])
+    globals()[name] = value
+    return value

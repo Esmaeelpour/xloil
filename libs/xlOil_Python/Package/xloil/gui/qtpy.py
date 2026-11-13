@@ -40,6 +40,18 @@ def _create_Qt_app():
     QtCore.qInstallMessageHandler(qt_msg_handler)
 
     from qtpy.QtWidgets import QApplication
+
+    # Qt WebEngine (used by xloil.plotting for interactive charts) must be imported
+    # and OpenGL context sharing enabled *before* the QApplication is created.
+    # Set XLOIL_QT_NO_WEBENGINE=1 to skip this.
+    if not os.environ.get("XLOIL_QT_NO_WEBENGINE"):
+        try:
+            from qtpy.QtCore import Qt, QCoreApplication
+            QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
+            from qtpy import QtWebEngineWidgets  # noqa: F401
+            log.info("Qt WebEngine available")
+        except Exception as e:
+            log.debug(f"Qt WebEngine not available: {e}")
     
     #
     # Attempt to workaround an apparent oversight in Qt initialisation on Windows.

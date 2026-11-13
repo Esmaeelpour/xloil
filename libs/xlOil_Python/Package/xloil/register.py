@@ -207,6 +207,92 @@ def async_wrapper(fn):
 
     return synchronised
 
+def _sync_generator_to_async(fn):
+    """
+    Converts a plain (synchronous) generator function into an async generator
+    function. Each call to the generator's `next` is run in the event loop's
+    default thread-pool executor so a generator which blocks (e.g. polling a
+    socket or sleeping) does not block xlOil's event loop. This allows plain
+    generators to be used as RTD functions: every yielded value updates the
+    calling cell.
+    """
+    import asyncio
+
+    @functools.wraps(fn)
+    async def agen(*args, **kwargs):
+        loop = asyncio.get_running_loop()
+        gen = fn(*args, **kwargs)
+        sentinel = object()
+        try:
+            while True:
+                value = await loop.run_in_executor(None, next, gen, sentinel)
+                if value is sentinel:
+                    break
+                yield value
+        finally:
+            try:
+                gen.close()
+            except ValueError:
+                # "generator already executing": the executor thread is still inside
+                # next(). The generator will be finalised when it is garbage collected
+                pass
+
+    return agen
+
+
+_MACRO_OPTION_NAMES = (
+    'disable_calculation',
+    'disable_screen_updating',
+    'disable_alerts',
+    'disable_events',
+    'restore_selection',
+    'restore_active_sheet')
+
+def _wrap_with_macro_options(fn, options: dict):
+    """
+    Wraps `fn` so that it runs inside an `xloil.MacroContext` with the
+    given options, e.g. screen updating disabled.
+    """
+    from .com import MacroContext
+
+    @functools.wraps(fn)
+    def wrapped(*args, **kwargs):
+        with MacroContext(**options):
+            return fn(*args, **kwargs)
+    return wrapped
+
+
+def _wrap_with_formatter(fn, formatter):
+    """
+    Wraps `fn` so that after it returns, the `formatter` is applied to the
+    range the result will occupy.  Formatting is done in a callback after
+    the calculation cycle as cell formats cannot be changed during a calc.
+    """
+    from .formatting import _schedule_format
+
+    @functools.wraps(fn)
+    def wrapped(*args, **kwargs):
+        result = fn(*args, **kwargs)
+        _schedule_format(formatter, result)
+        return result
+    return wrapped
+
+
+def _wrap_with_persist(fn):
+    """
+    Wraps `fn` so that its result is marked to be saved with the workbook
+    if it ends up in the object cache.  See `xloil.cache_persist`.
+    """
+    from .cache_persist import mark_persistent
+
+    @functools.wraps(fn)
+    def wrapped(*args, **kwargs):
+        result = fn(*args, **kwargs)
+        mark_persistent(result)
+        return result
+    return wrapped
+
+
 class _WorksheetFunc:
     """
     Decorator class for functions declared using `func`. The class contains 
@@ -234,7 +320,15 @@ def func(fn=None,
          volatile=False,
          is_async=False,
          register=True,
-         errors=None):
+         errors=None,
+         formatter=None,
+         persist=False,
+         disable_calculation=False,
+         disable_screen_updating=False,
+         disable_alerts=False,
+         disable_events=False,
+         restore_selection=False,
+         restore_active_sheet=False):
     """ 
     Decorator which tells xlOil to register the function (or callable) in Excel. 
     If arguments are annotated using 'typing' annotations, xlOil will attempt to 
@@ -334,9 +428,32 @@ def func(fn=None,
         it improves performance in the presence of error codes and it allow's Excel's 
         error tracing of function.
         
-        If *errors* is set to an empty string (the default), the ini file setting 
+        If *errors* is set to an empty string (the default), the ini file setting
         'ErrorPropagation' determines the behaviour.  If *errors* is 'accept', error
         values are passed to the function regardless of the ini file setting.
+    formatter: xloil.Formatter
+        A formatter (see `xloil.formatting`) applied to the cells the function's result
+        occupies, after the calculation cycle completes. For example
+        ``formatter=xloil.DataFrameFormatter()`` or ``formatter=xloil.Formatter(bold=True)``.
+        Not supported for async / RTD functions.
+    persist: bool
+        If True, objects returned by this function which are placed in the object cache
+        are saved inside the workbook when it is saved and restored into the cache when
+        the workbook is re-opened. Requires ``xloil.cache_persist`` to be enabled, see
+        that module. Objects must be picklable.
+    disable_calculation: bool
+        Macro option (most useful with ``command=True``): switches Excel to manual
+        calculation whilst the function runs, then restores the previous mode.
+    disable_screen_updating: bool
+        Macro option: turns off ``Application.ScreenUpdating`` whilst the function runs.
+    disable_alerts: bool
+        Macro option: turns off ``Application.DisplayAlerts`` whilst the function runs.
+    disable_events: bool
+        Macro option: turns off ``Application.EnableEvents`` whilst the function runs.
+    restore_selection: bool
+        Macro option: re-selects the cells which were selected before the function ran.
+    restore_active_sheet: bool
+        Macro option: re-activates the sheet which was active before the function ran.
     """
 
     def decorate(fn):
@@ -350,6 +467,36 @@ def func(fn=None,
             target_func = fn
             is_coroutine = inspect.iscoroutinefunction(fn)
             is_asyncgen = inspect.isasyncgenfunction(fn)
+
+            macro_options = {
+                k: v for k, v in [
+                    ('disable_calculation', disable_calculation),
+                    ('disable_screen_updating', disable_screen_updating),
+                    ('disable_alerts', disable_alerts),
+                    ('disable_events', disable_events),
+                    ('restore_selection', restore_selection),
+                    ('restore_active_sheet', restore_active_sheet)]
+                if v }
+
+            if (is_coroutine or is_asyncgen or inspect.isgeneratorfunction(fn)):
+                if formatter is not None:
+                    raise ValueError("'formatter' is not supported for async or RTD functions")
+                if any(macro_options):
+                    raise ValueError("Macro options are not supported for async or RTD functions")
+
+            # Wrapper order matters: persist must see the raw result, formatter must
+            # run inside any macro context
+            if persist:
+                target_func = _wrap_with_persist(target_func)
+            if formatter is not None:
+                target_func = _wrap_with_formatter(target_func, formatter)
+            if any(macro_options):
+                target_func = _wrap_with_macro_options(target_func, macro_options)
+
+            # Plain generators become RTD functions: each yielded value updates the cell
+            if inspect.isgeneratorfunction(fn):
+                target_func = _sync_generator_to_async(fn)
+                is_asyncgen = True
 
             # Coroutines need to be "synchronised" using an async/rtd return object.
             # Manual async functions need their arguments shuffled as the first one

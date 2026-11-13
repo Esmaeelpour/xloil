@@ -2,14 +2,17 @@ import sys
 import os
 from pathlib import Path
 import re
-import winreg as reg
+try:
+    import winreg as reg
+except ImportError:  # Not Windows: config commands still work, install does not
+    reg = None
 from contextlib import suppress
 import binascii
 import shutil as sh
 from ._paths import *
 from argparse import ArgumentParser
 
-_XL_START_PATH = Path(os.getenv('APPDATA')) / "Microsoft" / "Excel" / "XLSTART"
+_XL_START_PATH = Path(os.getenv('APPDATA', '.')) / "Microsoft" / "Excel" / "XLSTART"
 _XLL_INSTALL_PATH = _XL_START_PATH / ADDIN_NAME
 
 def _excel_regpath(version):
@@ -291,6 +294,170 @@ def _package_pyinstaller(ini_template: str,
     run()
 
 
+#
+# Configuration commands: status / config / intellisense
+#
+
+def _ini_path(ini=None) -> Path:
+    return Path(ini) if ini else Path(APP_DATA_DIR) / INIFILE_NAME
+
+
+def _load_ini(ini=None):
+    import tomlkit
+    path = _ini_path(ini)
+    if not path.exists():
+        raise FileNotFoundError(f"Settings file {path} not found: run `xloil install` first")
+    return path, tomlkit.parse(path.read_text(encoding='utf-8'))
+
+
+def _split_key(key: str):
+    parts = key.split('.')
+    if len(parts) < 2:
+        raise ValueError("Keys look like Section.Name, e.g. xlOil_Python.LoadModules")
+    return parts
+
+
+def _parse_value(text: str):
+    """ Parses a value written on the command line as TOML, falling back to a string """
+    import tomlkit
+    try:
+        item = tomlkit.parse(f"v = {text}\n")["v"]
+        # Return a plain python value so tomlkit formats it afresh (an item taken
+        # from another document keeps that document's whitespace)
+        return item.unwrap() if hasattr(item, "unwrap") else item
+    except Exception:
+        return text
+
+
+def config_get(key: str, ini: str = None):
+    """ Prints the value of a setting, e.g. ``xloil config get xlOil_Python.LoadModules`` """
+    _, doc = _load_ini(ini)
+    node = doc
+    for part in _split_key(key):
+        node = node[part]
+    print(node.as_string() if hasattr(node, "as_string") else node)
+
+
+def config_set(key: str, value: str, ini: str = None):
+    """
+        Sets a setting, preserving comments and layout, e.g.
+        ``xloil config set xlOil_Python.LoadModules "['xloil.xloil_ribbon', 'mymod']"``
+    """
+    import tomlkit
+    path, doc = _load_ini(ini)
+    parts = _split_key(key)
+    node = doc
+    for part in parts[:-1]:
+        if part not in node:
+            node[part] = tomlkit.table()
+        node = node[part]
+    node[parts[-1]] = _parse_value(value)
+    path.write_text(tomlkit.dumps(doc), encoding='utf-8')
+    print(f"Set {key} = {node[parts[-1]]!r} in {path}")
+
+
+def config_list(ini: str = None):
+    """ Prints all settings in the ini file (comments omitted) """
+    _, doc = _load_ini(ini)
+    def walk(node, prefix):
+        for k, v in node.items():
+            if hasattr(v, "items"):
+                walk(v, f"{prefix}{k}.")
+            elif isinstance(v, list) and v and all(hasattr(x, "items") for x in v):
+                for item in v:
+                    walk(item, f"{prefix}{k}.")
+            else:
+                print(f"{prefix}{k} = {v!r}")
+    walk(doc, "")
+
+
+def _set_python_executable(python: str, ini: str = None):
+    """ Points the ini's PYTHONEXECUTABLE at the given interpreter (venv aware) """
+    exe = Path(python)
+    if exe.is_dir():
+        # A venv or environment directory was given
+        for candidate in [exe / "Scripts" / "python.exe", exe / "python.exe"]:
+            if candidate.exists():
+                exe = candidate
+                break
+    if not exe.exists():
+        raise FileNotFoundError(f"Python executable {exe} not found")
+    for cfg in [exe.parent / "pyvenv.cfg", exe.parent.parent / "pyvenv.cfg"]:
+        if cfg.exists():
+            print(f"Virtual environment detected ({cfg}): xlOil will read its 'home' setting")
+            break
+    path = _ini_path(ini)
+    text = path.read_text(encoding='utf-8')
+    text, ok = _write_python_path_to_ini(text, _get_xloil_bin_dir(), comment_reg_keys=True,
+                                         replace_paths={'PYTHONEXECUTABLE': str(exe)})
+    if not ok:
+        raise RuntimeError(f"Could not find PYTHONEXECUTABLE in {path}")
+    path.write_text(text, encoding='utf-8')
+    print(f"PYTHONEXECUTABLE set to {exe}")
+
+
+def _install_cmd(ini_template=None, python=None, load_modules=None, startup_script=None,
+                 replace_ini=False, intellisense=False):
+    install_xloil(ini_template, replace_ini=replace_ini)
+    if python:
+        _set_python_executable(python)
+    if load_modules:
+        mods = [m.strip() for m in load_modules.split(',') if m.strip()]
+        config_set('xlOil_Python.LoadModules', '[' + ', '.join(f'"{m}"' for m in mods) + ']')
+    if startup_script:
+        config_set('xlOil_Python.StartupScript',
+                   " + str(Path(startup_script).resolve()) + ")
+    if intellisense:
+        _intellisense_cmd('install')
+
+
+def status():
+    """ Prints where xlOil is installed and which Python it uses """
+    print(f"xlOil Python package : {Path(__file__).parent}")
+    print(f"Python executable    : {sys.executable}")
+    try:
+        print(f"xlOil binaries       : {_get_xloil_bin_dir()}")
+    except Exception as e:
+        print(f"xlOil binaries       : NOT FOUND ({e})")
+    print(f"Add-in in XLSTART    : {_XLL_INSTALL_PATH} "
+          f"({'present' if _XLL_INSTALL_PATH.exists() else 'missing'})")
+    ini = _ini_path()
+    print(f"Settings file        : {ini} ({'present' if ini.exists() else 'missing'})")
+    if ini.exists():
+        try:
+            _, doc = _load_ini()
+            py = doc.get('xlOil_Python', {})
+            print(f"  LoadModules        : {py.get('LoadModules')}")
+            print(f"  StartupScript      : {py.get('StartupScript')}")
+            for env in py.get('Environment', []):
+                if 'PYTHONEXECUTABLE' in env:
+                    print(f"  PYTHONEXECUTABLE   : {env['PYTHONEXECUTABLE']}")
+        except Exception as e:
+            print(f"  (could not parse: {e})")
+    try:
+        print(f"Excel version        : {_find_excel_version()}")
+    except Exception:
+        print("Excel version        : not found")
+    from .intellisense import default_xll_name
+    isense = _XL_START_PATH / default_xll_name()
+    print(f"IntelliSense add-in  : {'installed' if isense.exists() else 'not installed'}")
+
+
+def _intellisense_cmd(action, target_dir=None):
+    from .intellisense import install_intellisense_addin, default_xll_name
+    if action == 'install':
+        install_intellisense_addin(target_dir)
+        print("Enable descriptions by adding 'xloil.intellisense' to LoadModules or calling "
+              "xloil.intellisense.enable() in a startup script, then restart Excel")
+    elif action == 'remove':
+        path = Path(target_dir or _XL_START_PATH) / default_xll_name()
+        if path.exists():
+            path.unlink()
+            print(f"Removed {path}")
+        else:
+            print(f"{path} not found")
+
+
 def main():
     parser = ArgumentParser(prog='xlOil', 
                             description='Excel/Python integration')
@@ -302,7 +469,48 @@ def main():
                                    'and sets the correct paths in xloil.ini')
     p.add_argument("ini_template", nargs='?', type=str, default=None,
                    help='Path to xloil.ini file to modify and install, if not present the default file is used')
-    p.set_defaults(func=install_xloil)
+    p.add_argument("--python", type=str, default=None,
+                   help='Python executable, environment or venv directory xlOil should use '
+                        '(default: the one running this command)')
+    p.add_argument("--load-modules", dest="load_modules", type=str, default=None,
+                   help='Comma-separated modules to load on start-up, e.g. xloil.xloil_ribbon,mymodule')
+    p.add_argument("--startup-script", dest="startup_script", type=str, default=None,
+                   help='A python script to run when xlOil starts, before LoadModules')
+    p.add_argument("--replace-ini", dest="replace_ini", action='store_true',
+                   help='Overwrite an existing settings file rather than keeping it')
+    p.add_argument("--intellisense", action='store_true',
+                   help='Also download and install the Excel-DNA IntelliSense add-in')
+    p.set_defaults(func=_install_cmd)
+
+    p = subparsers.add_parser('status', help='Shows where xlOil is installed and how it is configured')
+    p.set_defaults(func=status)
+
+    p = subparsers.add_parser('config', help='Reads or changes settings in xlOil.ini')
+    config_sub = p.add_subparsers()
+    c = config_sub.add_parser('get', help='Prints a setting, e.g. xlOil_Python.LoadModules')
+    c.add_argument("key")
+    c.add_argument("--ini", default=None, help='Settings file (default %%APPDATA%%/xlOil/xlOil.ini)')
+    c.set_defaults(func=config_get)
+    c = config_sub.add_parser('set', help='Sets a setting. The value is parsed as TOML, so quote strings')
+    c.add_argument("key")
+    c.add_argument("value")
+    c.add_argument("--ini", default=None)
+    c.set_defaults(func=config_set)
+    c = config_sub.add_parser('list', help='Prints all settings')
+    c.add_argument("--ini", default=None)
+    c.set_defaults(func=config_list)
+    c = config_sub.add_parser('python', help='Sets the Python executable / venv xlOil uses')
+    c.add_argument("python")
+    c.add_argument("--ini", default=None)
+    c.set_defaults(func=_set_python_executable)
+
+    p = subparsers.add_parser('intellisense',
+                              help='Installs or removes the Excel-DNA IntelliSense add-in '
+                                   '(in-sheet function tooltips)')
+    p.add_argument("action", choices=['install', 'remove'])
+    p.add_argument("--target-dir", dest="target_dir", default=None,
+                   help='Install directory (default: Excel XLSTART folder)')
+    p.set_defaults(func=_intellisense_cmd)
     
     p = subparsers.add_parser('create', 
                               help='Creates an XLL addin to simplify distribution of Excel funcs to other xlOil users')
@@ -337,7 +545,10 @@ def main():
     args, more_args = parser.parse_known_args()
     
     func_args = vars(args)
-    func = func_args.pop("func")
+    func = func_args.pop("func", None)
+    if func is None:
+        parser.print_help()
+        return
     if len(more_args) > 0:
         func(**vars(args), extra_args=more_args)
     else:

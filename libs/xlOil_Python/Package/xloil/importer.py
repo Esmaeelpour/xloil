@@ -198,9 +198,101 @@ def _import_file(path, addin=None, workbook_name:str=None):
 
 
 
+_STARTUP_SCRIPTS_RUN = set()
+
+def _addin_setting(addin, key, default=None):
+    """ Reads a key from the [xlOil_Python] section of the add-in's ini file """
+    try:
+        section = addin.settings['xlOil_Python']
+        value = section[key]
+        return default if value is None else value
+    except Exception:
+        return default
+
+
+def run_startup_scripts(addin):
+    """
+        Runs the scripts named by the ``StartupScript`` setting in the add-in's 
+        ``[xlOil_Python]`` ini section, once per add-in, before ``LoadModules`` 
+        are imported. The setting may be a path or a list of paths; relative 
+        paths are resolved against the ini file's directory. Each script runs 
+        with `runpy.run_path`, so it can set environment variables, extend 
+        ``sys.path``, configure logging, enable features, etc.
+    """
+    import runpy
+    scripts = _addin_setting(addin, 'StartupScript')
+    if not scripts:
+        return
+    if isinstance(scripts, str):
+        scripts = [scripts]
+
+    try:
+        base_dir = os.path.dirname(addin.settings_file)
+    except Exception:
+        base_dir = os.getcwd()
+
+    for script in scripts:
+        path = os.path.expandvars(os.path.expanduser(str(script)))
+        if not os.path.isabs(path):
+            path = os.path.join(base_dir, path)
+        path = os.path.normpath(path)
+        key = (addin.pathname, path)
+        if key in _STARTUP_SCRIPTS_RUN:
+            continue
+        _STARTUP_SCRIPTS_RUN.add(key)
+        if not os.path.exists(path):
+            log.error("StartupScript '%s' not found", path)
+            continue
+        log.info("Running startup script '%s' for addin '%s'", path, addin.pathname)
+        try:
+            runpy.run_path(path, run_name="__xloil_startup__")
+        except Exception:
+            log_except(f"StartupScript '{path}' failed")
+
+
+def reload(module=None):
+    """
+        Reloads Python modules loaded by xlOil and re-registers their Excel 
+        functions, without restarting Excel. xlOil already does this 
+        automatically when a watched source file is saved; this function 
+        forces it, e.g. after changing a dependency which is not watched.
+
+        Parameters
+        ----------
+        module: str, module or None
+            The module (or module name) to reload. If None, reloads every module
+            xlOil has registered functions from.
+
+        Returns the list of module names reloaded.
+    """
+    helper = ImportHelper()
+    if module is None:
+        names = list(dict.fromkeys(helper.watched_modules.values()))
+    elif isinstance(module, str):
+        names = [module]
+    else:
+        names = [module.__name__]
+
+    import xloil_core
+    reloaded = []
+    for name in names:
+        mod = sys.modules.get(name)
+        if mod is None:
+            log.warn(f"reload: module '{name}' is not loaded")
+            continue
+        filepath = getattr(getattr(mod, "__spec__", None), "origin", None)
+        addin_path = helper.module_addin.get(filepath) or helper.module_addin.get(name)
+        addin = xloil_core.xloil_addins[addin_path] if addin_path in xloil_core.xloil_addins             else xloil_core.core_addin()
+        addin.event_loop.call_soon_threadsafe(helper.reload, mod)
+        reloaded.append(name)
+    return reloaded
+
+
 def _import_and_scan(module_names, addin):
     
     import xloil_core
+
+    run_startup_scripts(addin)
 
     def work(target):
         try:

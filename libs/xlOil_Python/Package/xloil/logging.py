@@ -16,7 +16,10 @@ log = _LogWriter()
 def _log_warnings(message, category, filename, lineno, file=None, line=None):
     log(warnings.formatwarning(message, category, filename, lineno, line), level='warn')
 
-warnings.showwarning = _log_warnings
+from ._core import XLOIL_STUB_MODE
+if not XLOIL_STUB_MODE:
+    # In stub mode (tests) leave Python's warning display alone
+    warnings.showwarning = _log_warnings
 
 def log_except(msg, level='error'):
     """

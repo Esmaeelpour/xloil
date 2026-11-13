@@ -170,6 +170,20 @@ def _try_create_from_wxframe(obj) -> CustomTaskPane:
             return wx_thread().submit(WxThreadTaskPane, obj).result()
     return obj
 
+def _try_create_from_toolkits(obj):
+    """
+        If obj is not already a CustomTaskPane, looks for a registered
+        `xloil.gui.toolkits.GuiToolkit` which handles it and wraps it in a
+        `ToolkitTaskPane`.
+    """
+    if isinstance(obj, CustomTaskPane) or inspect.isawaitable(obj):
+        return obj
+    from .toolkits import find_toolkit, ToolkitTaskPane
+    toolkit = find_toolkit(obj)
+    if toolkit is not None:
+        return ToolkitTaskPane(obj, toolkit)
+    return obj
+
 def _get_pane_name(pane):
     name = getattr(pane, "name", None)
     if name is None:
@@ -197,6 +211,7 @@ async def _attach_task_pane_async(
     # A little convenience for Qt/Wx users to avoid needing to create a QtThreadTaskPane
     pane = _try_create_from_qwidget(pane)
     pane = _try_create_from_wxframe(pane)
+    pane = _try_create_from_toolkits(pane)
 
     if inspect.isawaitable(pane):
         pane = await pane
@@ -229,6 +244,7 @@ def _attach_task_pane(
     # A little convenience for Qt users to avoid needing to create a QtThreadTaskPane
     pane = _try_create_from_qwidget(pane)
     pane = _try_create_from_wxframe(pane)
+    pane = _try_create_from_toolkits(pane)
 
     pane._attach_frame(frame_future)
     
