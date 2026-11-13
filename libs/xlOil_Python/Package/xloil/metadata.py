@@ -59,6 +59,9 @@ def _workbook_com(workbook):
     return workbook
 
 
+# Note: Office DocumentProperties collections are late-bound. Their `Item` is a
+# default member, reachable as props(i) / props(name) but not props.Item(i).
+
 class _BuiltinProperties(MutableMapping):
     """
         Dict-like access to a workbook's built-in document properties such as
@@ -83,7 +86,7 @@ class _BuiltinProperties(MutableMapping):
     def __iter__(self) -> Iterator[str]:
         props = self._wb.BuiltinDocumentProperties
         for i in range(1, props.Count + 1):
-            yield props.Item(i).Name
+            yield props(i).Name
 
     def __len__(self):
         return self._wb.BuiltinDocumentProperties.Count
@@ -111,7 +114,7 @@ class _CustomProperties(MutableMapping):
     def _find(self, name):
         props = self._wb.CustomDocumentProperties
         for i in range(1, props.Count + 1):
-            prop = props.Item(i)
+            prop = props(i)
             if prop.Name == name:
                 return prop
         return None
@@ -136,8 +139,9 @@ class _CustomProperties(MutableMapping):
             if prop_type is None:
                 prop_type = 4
                 value = str(value)
-        self._wb.CustomDocumentProperties.Add(
-            Name=name, LinkToContent=False, Type=prop_type, Value=value)
+        # DocumentProperties is late-bound (no type info), so keyword 
+        # arguments are not supported: pass Name, LinkToContent, Type, Value
+        self._wb.CustomDocumentProperties.Add(name, False, prop_type, value)
 
     def __delitem__(self, name):
         prop = self._find(name)
@@ -148,7 +152,7 @@ class _CustomProperties(MutableMapping):
     def __iter__(self):
         props = self._wb.CustomDocumentProperties
         for i in range(1, props.Count + 1):
-            yield props.Item(i).Name
+            yield props(i).Name
 
     def __len__(self):
         return self._wb.CustomDocumentProperties.Count

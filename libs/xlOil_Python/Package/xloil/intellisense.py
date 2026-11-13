@@ -95,13 +95,52 @@ def _addin_xml_path(addin) -> Path:
     return xll.with_suffix(".intellisense.xml")
 
 
+# addin pathname -> {module key -> {function name -> spec}}. xlOil's
+# `Addin.functions()` does not list functions registered from modules attached
+# to other add-ins, so we track what passes through registration ourselves.
+_REGISTERED = {}
+
+
+def _module_key(module) -> str:
+    if module is None:
+        return "<none>"
+    return getattr(module, "__name__", None) or str(module)
+
+
+def record_registration(addin, funcs, module=None, append=False):
+    """ Records specs registered for an add-in, mirroring xlOil's replace/append rules """
+    by_module = _REGISTERED.setdefault(addin.pathname, {})
+    key = _module_key(module)
+    entry = by_module.get(key, {}) if append else {}
+    for spec in funcs:
+        try:
+            entry[spec.name] = spec
+        except Exception:
+            continue
+    by_module[key] = entry
+
+
+def _specs_for(addin, extra_specs=()):
+    specs = {}
+    try:
+        for spec in addin.functions():
+            specs[spec.name] = spec
+    except Exception:
+        pass
+    for entry in _REGISTERED.get(addin.pathname, {}).values():
+        specs.update(entry)
+    for spec in extra_specs:
+        specs[spec.name] = spec
+    return [specs[name] for name in sorted(specs)]
+
+
 def write_addin_file(addin, extra_specs=()) -> Optional[Path]:
     """
         Writes the ``.intellisense.xml`` file for an xlOil add-in, describing all
         its registered functions. Returns the path written.
     """
     elements = []
-    for spec in list(addin.functions()) + list(extra_specs):
+    for spec in _specs_for(addin, extra_specs):
         xml = spec_to_xml(spec)
         if xml:
             elements.append(xml)
@@ -160,12 +199,14 @@ def enable():
     original = register._register_functions
 
     def hooked(funcs, module=None, addin=None, append=False):
+        funcs = list(funcs)
         result = original(funcs, module, addin, append)
         try:
-            if addin is not None:
-                write_addin_file(addin)
-            else:
-                refresh()
+            if addin is None:
+                from .importer import source_addin
+                addin = source_addin()
+            record_registration(addin, funcs, module, append)
+            write_addin_file(addin)
         except Exception:
             log_except("IntelliSense: update after registration failed")
         return result

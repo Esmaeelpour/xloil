@@ -23,7 +23,7 @@
 
 from typing import Optional, Dict, Union, Tuple, Any
 from .logging import log
-from ._deferred import caller_location, run_after_calc, result_shape, CellLocation
+from ._deferred import com_offset, com_resize, caller_location, run_after_calc, result_shape, CellLocation
 
 ColorSpec = Union[str, Tuple[int, int, int], int, None]
 
@@ -258,17 +258,17 @@ class DataFrameFormatter(Formatter):
 
         ncols = len(col_names)
         total_rows, total_cols = nrows + n_head, ncols + n_index
-        whole = rng.Resize(total_rows, total_cols)
+        whole = com_resize(rng, total_rows, total_cols)
 
         # Base attributes on the whole block (e.g. font_name)
         super().apply_to_com(whole)
 
         if n_head > 0 and self.header is not None:
-            self.header.apply_to_com(whole.Resize(n_head, total_cols))
+            self.header.apply_to_com(com_resize(whole, n_head, total_cols))
         if n_index > 0 and self.index is not None and nrows > 0:
-            self.index.apply_to_com(whole.Offset(n_head, 0).Resize(nrows, n_index))
+            self.index.apply_to_com(com_resize(com_offset(whole, n_head, 0), nrows, n_index))
         if nrows > 0 and ncols > 0:
-            body = whole.Offset(n_head, n_index).Resize(nrows, ncols)
+            body = com_resize(com_offset(whole, n_head, n_index), nrows, ncols)
             if self.values is not None:
                 self.values.apply_to_com(body)
             if self.alternate_row_color is not None:
@@ -387,10 +387,13 @@ def _schedule_format(formatter: Formatter, value):
     rows, cols = result_shape(value,
         index=getattr(formatter, "index_included", None))
 
+    log.debug(f"Formatter {type(formatter).__name__} scheduled for {location.key()} "
+              f"({rows}x{cols})")
+
     def do_format():
         rng = location.com_range()
         if not isinstance(formatter, DataFrameFormatter):
-            rng = rng.Resize(rows, cols)
+            rng = com_resize(rng, rows, cols)
         formatter.apply_value(rng, value)
 
     run_after_calc(do_format)

@@ -222,11 +222,23 @@ class SheetControl:
 
     @property
     def workbook(self) -> str:
+        """ The workbook name (kept current across Save As / rename) """
+        self._refresh_names()
         return self._workbook_name
 
     @property
     def sheet(self) -> str:
+        """ The sheet name (kept current across renames) """
+        self._refresh_names()
         return self._sheet_name
+
+    def _refresh_names(self):
+        """ Re-reads the workbook and sheet names: they change on Save As / rename """
+        try:
+            self._workbook_name = self._sheet.Parent.Name
+            self._sheet_name = self._sheet.Name
+        except Exception:
+            pass
 
     def submit(self, fn, *args, **kwargs):
         """ Runs ``fn(widget, *args, **kwargs)`` on the toolkit thread, returning a Future """
@@ -310,6 +322,7 @@ class SheetControl:
             screen if not attached as a child), or None if it should be hidden.
         """
         window = self._window
+        self._refresh_names()
         if window.ActiveSheet.Name != self._sheet_name or \
                 window.Parent.Name != self._workbook_name or \
                 not window.Visible or window.WindowState == -4140: # xlMinimized
@@ -461,8 +474,18 @@ def _on_workbook_before_close(wb_name, cancel):
     # Detach now: if the close is cancelled the tracker re-creates nothing, so
     # controls are only dropped on actual close. We can't know yet, so hide
     # windows; the WorkbookAfterClose handler releases them.
+    # Match by window handle: names may have changed since the control was
+    # created (Save As renames the workbook)
+    hwnds = set()
+    try:
+        wb = xloil_core.app().to_com().Workbooks(wb_name)
+        for i in range(1, wb.Windows.Count + 1):
+            hwnds.add(int(wb.Windows(i).Hwnd))
+    except Exception:
+        pass
     with _lock:
-        controls = [c for c in _CONTROLS.values() if c.workbook == wb_name]
+        controls = [c for c in _CONTROLS.values()
+                    if c._xlmain in hwnds or c.workbook == wb_name]
     for c in controls:
         try:
             # Reparent to desktop so Excel's window teardown doesn't destroy it

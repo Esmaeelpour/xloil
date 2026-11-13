@@ -96,6 +96,25 @@ def _ref_to_key(ref: str) -> str:
     return ref[2:-2]
 
 
+def _iter_cache_refs(cache):
+    """
+        Yields (reference string, object) for every object in the cache. In 
+        xlOil 0.22, `ObjectCache.keys()` returns keys without the ",A" counter
+        suffix used in the reference strings written to cells, so probe the
+        suffixes when a key is not itself a valid reference.
+    """
+    for key in cache.keys():
+        if len(key) > 2 and key[-2] == ',' and key in cache:
+            yield key, cache.get(key)
+            continue
+        for i in range(64):
+            ref = f"{key},{chr(65 + i)}"
+            obj = cache.get(ref)
+            if obj is None:
+                break
+            yield ref, obj
+
+
 def collect(workbook_name: str) -> Dict[str, bytes]:
     """
         Serialises the persistable cache objects belonging to the named workbook.
@@ -105,14 +124,9 @@ def collect(workbook_name: str) -> Dict[str, bytes]:
     cache = xloil_core.cache
     result = {}
     total = 0
-    live_ids = set()
-    for ref in cache.keys():
+    for ref, obj in _iter_cache_refs(cache):
         if _ref_workbook(ref) != workbook_name:
             continue
-        obj = cache.get(ref)
-        if obj is None:
-            continue
-        live_ids.add(id(obj))
         if not _should_persist(obj):
             continue
         try:
@@ -184,7 +198,7 @@ def _on_before_save(wb_name, save_as_ui, cancel):
         log_except(f"cache_persist: failed saving cache objects for {wb_name}")
 
 
-def _on_open(wb_name):
+def _on_open(wb_path, wb_name):
     def work():
         try:
             restore(wb_name)

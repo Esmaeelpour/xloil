@@ -56,7 +56,7 @@ from typing import Callable, Dict, Optional, Tuple
 
 import xloil_core
 from .logging import log, log_except
-from ._deferred import caller_location, run_after_calc, CellLocation
+from ._deferred import com_offset, com_resize, caller_location, run_after_calc, CellLocation
 from .type_converters import return_converters, _make_typeconverter
 from xloil_core import _CustomReturn
 
@@ -147,7 +147,7 @@ def _show_interactive(html: str, location: CellLocation, size, offset, name: str
         if existing is not None:
             existing.submit(_reload_view, path)
             return
-        anchor = location.com_range().Offset(offset[0], offset[1])
+        anchor = com_offset(location.com_range(), offset[0], offset[1])
         from qtpy.QtWebEngineWidgets import QWebEngineView
         toolkit = find_toolkit(QWebEngineView)
         SheetControl(_WebViewFactory(path), sheet=sheet, at=anchor.Address, size=size,
@@ -165,7 +165,7 @@ def _show_static(obj, png_func, location: CellLocation, size, offset):
     if offset != (0, 0):
         def compute_pos():
             rng = location.com_range()
-            target = rng.Offset(offset[0], offset[1])
+            target = com_offset(rng, offset[0], offset[1])
             return (float(target.Left - rng.Left), float(target.Top - rng.Top))
         try:
             pos = compute_pos()

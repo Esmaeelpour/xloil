@@ -73,6 +73,13 @@ class GuiToolkit:
         """
         raise NotImplementedError()
 
+    def is_running(self) -> bool:
+        """ 
+            True if this toolkit's GUI thread has been started. Used to pick a 
+            toolkit for widget factory functions.
+        """
+        return False
+
     def prepare_for_sheet(self, widget):
         """ Optional hook: called before a widget is placed on a worksheet """
         pass
@@ -101,14 +108,27 @@ def registered_toolkits() -> List[GuiToolkit]:
     return list(_TOOLKITS)
 
 
-def find_toolkit(obj) -> Optional[GuiToolkit]:
-    """ Returns the first registered toolkit which handles `obj`, or None """
+def find_toolkit(obj, allow_factory: bool = True) -> Optional[GuiToolkit]:
+    """
+        Returns the first registered toolkit which handles `obj`, or None.
+
+        If `obj` is a plain function (a widget factory) no toolkit can tell 
+        from the object itself what it will create. In that case, if exactly 
+        one GUI toolkit is running (e.g. only `xloil.gui.qtpy` has been 
+        imported) that toolkit is returned. Otherwise pass ``toolkit=`` 
+        explicitly.
+    """
     for toolkit in _TOOLKITS:
         try:
             if toolkit.handles(obj):
                 return toolkit
         except Exception:
             continue
+
+    if allow_factory and callable(obj) and not isinstance(obj, type):
+        running = [t for t in _TOOLKITS if t.is_running()]
+        if len(running) == 1:
+            return running[0]
     return None
 
 
@@ -159,9 +179,13 @@ class QtToolkit(GuiToolkit):
         from xloil.gui.qtpy import Qt_thread
         return Qt_thread()
 
+    def is_running(self):
+        mod = sys.modules.get('xloil.gui.qtpy')
+        return mod is not None and getattr(mod, '_Qt_thread', None) is not None
+
     def create(self, obj):
         from qtpy.QtWidgets import QWidget
-        return obj if isinstance(obj, QWidget) else obj()
+        return obj if isinstance(obj, QWidget) else obj()  # class or factory
 
     def get_hwnd(self, widget):
         from qtpy.QtCore import Qt
@@ -188,6 +212,10 @@ class TkToolkit(GuiToolkit):
     def executor(self):
         from xloil.gui.tkinter import Tk_thread
         return Tk_thread()
+
+    def is_running(self):
+        mod = sys.modules.get('xloil.gui.tkinter')
+        return mod is not None and getattr(mod, '_Tk_thread', None) is not None
 
     def create(self, obj):
         import tkinter
@@ -217,6 +245,9 @@ class WxToolkit(GuiToolkit):
     def executor(self):
         from xloil.gui.wx import wx_thread
         return wx_thread()
+
+    def is_running(self):
+        return 'xloil.gui.wx' in sys.modules
 
     def create(self, obj):
         import wx

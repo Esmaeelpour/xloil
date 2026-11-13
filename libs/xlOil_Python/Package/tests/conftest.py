@@ -65,6 +65,10 @@ class FakeRange(FakeCom):
     def Offset(self, rows, cols):
         return FakeRange(self.row + rows, self.col + cols, self.nrows, self.ncols, self.log)
 
+    # Early-bound (makepy) COM ranges expose parameterised properties as GetX
+    GetResize = Resize
+    GetOffset = Offset
+
     def Rows(self, i):
         return FakeRange(self.row + i - 1, self.col, 1, self.ncols, self.log)
 

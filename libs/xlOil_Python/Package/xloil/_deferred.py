@@ -11,6 +11,23 @@ import xloil_core
 from .logging import log
 
 
+def com_offset(rng, rows: int, cols: int):
+    """
+        Range.Offset(rows, cols) that works with both early-bound (makepy) and 
+        late-bound win32com objects. With early binding, `rng.Offset(r, c)` 
+        evaluates `rng.Offset` with no arguments and then indexes the result, 
+        silently returning the wrong cell; the generated `GetOffset` must be used.
+    """
+    getter = getattr(rng, "GetOffset", None)
+    return getter(rows, cols) if getter is not None else rng.Offset(rows, cols)
+
+
+def com_resize(rng, rows: int, cols: int):
+    """ Range.Resize(rows, cols) for early- and late-bound COM objects, see `com_offset` """
+    getter = getattr(rng, "GetResize", None)
+    return getter(rows, cols) if getter is not None else rng.Resize(rows, cols)
+
+
 class CellLocation(NamedTuple):
     """ The workbook, sheet and local A1 address of a cell or range """
     workbook: str
@@ -45,7 +62,9 @@ def caller_location() -> Optional[CellLocation]:
         if workbook is None or sheet is None:
             return None
         address = caller.address(local=True)
-        # Use the top-left cell of a multi-cell array formula
+        # The address may still be qualified, e.g. "'[Book1]Sheet1'!C1": keep the
+        # cell part, and the top-left cell of a multi-cell array formula
+        address = address.rsplit("!", 1)[-1]
         address = address.split(":")[0].replace("$", "")
         return CellLocation(workbook, sheet, address)
     except Exception as e:

@@ -33,7 +33,7 @@ import numpy as np
 import xloil_core
 from .type_converters import converter, returner
 from ._core import CannotConvert, Range
-from ._deferred import caller_location, run_after_calc, CellLocation
+from ._deferred import com_offset, com_resize, caller_location, run_after_calc, CellLocation
 from .logging import log
 
 _XL_SRC_RANGE = 1   # xlSrcRange
@@ -210,6 +210,9 @@ def write_table(value, target, name: Optional[str] = None, style: Optional[str] 
         Returns the COM ListObject.
     """
     headings, data = _frame_to_values(value, index)
+    if data.shape[0] == 0:
+        # An Excel table always has at least one (possibly empty) data row
+        data = np.full((1, len(headings)), None, dtype=object)
     nrows, ncols = data.shape[0] + 1, len(headings)
 
     if isinstance(target, CellLocation):
@@ -234,7 +237,8 @@ def write_table(value, target, name: Optional[str] = None, style: Optional[str] 
         if existing is not None and existing.Range.Cells(1, 1).Address != anchor.Address:
             existing = None
 
-    new_range = anchor.Resize(nrows, ncols)
+    new_range = com_resize(anchor, nrows, ncols)
+    values = _to_com_values(headings, data)
 
     if existing is not None:
         # Clear old contents and resize to the new shape (Resize requires the
@@ -246,14 +250,23 @@ def write_table(value, target, name: Optional[str] = None, style: Optional[str] 
         existing.Resize(new_range)
         # Clear cells the old table covered but the new one doesn't
         if old_rows > nrows:
-            anchor.Offset(nrows, 0).Resize(old_rows - nrows, max(old_cols, ncols)).ClearContents()
+            com_resize(com_offset(anchor, nrows, 0), old_rows - nrows, max(old_cols, ncols)).ClearContents()
         if old_cols > ncols:
-            anchor.Offset(0, ncols).Resize(old_rows, old_cols - ncols).ClearContents()
+            com_resize(com_offset(anchor, 0, ncols), old_rows, old_cols - ncols).ClearContents()
+        # Write headers and body separately: assigning one array over the whole
+        # range of an existing table (headers included) makes Excel drop the table
+        com_resize(anchor, 1, ncols).Value = (values[0],)
+        if len(values) > 1:
+            com_resize(com_offset(anchor, 1, 0), len(values) - 1, ncols).Value = values[1:]
         lo = existing
     else:
-        lo = sheet.ListObjects.Add(_XL_SRC_RANGE, new_range, None, _XL_YES)
-
-    new_range.Value = _to_com_values(headings, data)
+        # Write the data first, then convert the range into a table: creating 
+        # the table and then overwriting its whole range invalidates it. Named
+        # arguments because a positional None for LinkSource is mis-marshalled.
+        new_range.Value = values
+        sheet.ListObjects.Add(SourceType=_XL_SRC_RANGE, Source=new_range, 
+                              XlListObjectHasHeaders=_XL_YES)
+        lo = anchor.ListObject
 
     if name and lo.Name != name:
         try:
@@ -310,7 +323,7 @@ class TableReturn:
         nrows = data.shape[0]
 
         def do_write():
-            anchor = location.com_range().Offset(self._offset[0], self._offset[1])
+            anchor = com_offset(location.com_range(), self._offset[0], self._offset[1])
             write_table(value, anchor, name=name, style=self._style, index=self._index)
 
         run_after_calc(do_write)
