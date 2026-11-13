@@ -28,7 +28,7 @@ Compatibility
 Quality checks
 --------------
 
-Every push runs, on GitHub Actions (with CircleCI as a fallback):
+Every push runs, on GitHub Actions (free and unlimited for this public repository):
 
 * the stub-mode unit tests (``libs/xlOil_Python/Package/tests``) on Linux and
   Windows, Python 3.9 and 3.12;

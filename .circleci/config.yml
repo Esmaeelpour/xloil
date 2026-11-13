@@ -1,4 +1,6 @@
-# Fallback CI for when GitHub Actions minutes run out. Runs the same build as
+# OPTIONAL, INACTIVE fallback CI. It isn't needed while this repository is public:
+# GitHub Actions minutes are unlimited for public repos. Use it only if the repo
+# becomes private and runs out of Actions minutes. Runs the same build as
 # .github/workflows/build-release.yml: stub-mode Python tests on Linux, the
 # Windows x64 add-in build, wheels, and (on a v* tag) a GitHub Release.
 #
