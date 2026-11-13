@@ -627,6 +627,17 @@ _RIBBON_MODULES = {"com": "xloil.xloil_ribbon", "xlam": "xloil.xlam_ribbon"}
 XLAM_NAME = "xlOil.xlam"
 
 
+def _user_modules(ini=None) -> list:
+    """ Your own modules in LoadModules (anything not part of xlOil), so that
+        re-running setup keeps them """
+    try:
+        _, doc = _load_ini(ini)
+        mods = [str(m) for m in doc["xlOil_Python"]["LoadModules"]]
+    except Exception:
+        return []
+    return [m for m in mods if m != "xloil" and not m.startswith("xloil.")]
+
+
 def _xlam_source() -> Path:
     """ The xlOil.xlam shipped in this package. (Not imported from xloil.xlam_ribbon:
         that module, like the ribbon logic it uses, only loads inside Excel.) """
@@ -820,7 +831,10 @@ def setup(features: str = None, yes: bool = False, no_pip: bool = False, intelli
     modules = [_RIBBON_MODULES["xlam" if use_xlam else "com"]]
     for f in chosen:
         modules += list(f.modules)
-    modules = order_modules(modules)
+    own = _user_modules()
+    if own:
+        print(f"Keeping your modules: {', '.join(own)}\n")
+    modules = order_modules(modules + [m for m in own if m not in modules])
 
     _install_cmd(load_modules=",".join(modules))
     if use_xlam:

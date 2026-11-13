@@ -52,7 +52,7 @@ command prompt *in the Python environment you want Excel to use*:
 
 .. code-block:: bat
 
-    pip install xloil-0.22.1.post6-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post7-cp312-cp312-win_amd64.whl
     xloil setup
 
 ``xloil setup`` is the guided set-up. ``--features pandas,polars,charts,qt,intellisense,cache``
@@ -65,6 +65,11 @@ there too.
 
 Changing settings later
 -----------------------
+
+Running the installer or ``xloil setup`` again (for example to upgrade) keeps your
+own modules in ``LoadModules`` and your search paths; only xlOil's own modules are
+rebuilt from the features you choose.
+
 
 The *xlOil Py* ribbon tab holds the common settings, so you rarely need to edit
 ``xlOil.ini``:
@@ -117,7 +122,7 @@ Optional extras install the libraries for particular features:
 
 .. code-block:: bat
 
-    pip install "xloil-0.22.1.post6-cp312-cp312-win_amd64.whl[all]"      :: everything below
+    pip install "xloil-0.22.1.post7-cp312-cp312-win_amd64.whl[all]"      :: everything below
     pip install "xloil-...whl[pandas]"      :: DataFrames
     pip install "xloil-...whl[polars]"      :: polars
     pip install "xloil-...whl[plotting]"    :: matplotlib, plotly, Qt WebEngine charts
@@ -134,7 +139,7 @@ environment*:
 
     conda create -n xl python=3.12 pandas
     conda activate xl
-    pip install xloil-0.22.1.post6-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post7-cp312-cp312-win_amd64.whl
     xloil install
 
 Unlike python.org installs, an embedded conda interpreter cannot find its
