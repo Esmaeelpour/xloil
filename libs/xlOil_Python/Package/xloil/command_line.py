@@ -624,6 +624,13 @@ def _set_python_executable(python: str, ini: str = None):
 
 
 _RIBBON_MODULES = {"com": "xloil.xloil_ribbon", "xlam": "xloil.xlam_ribbon"}
+XLAM_NAME = "xlOil.xlam"
+
+
+def _xlam_source() -> Path:
+    """ The xlOil.xlam shipped in this package. (Not imported from xloil.xlam_ribbon:
+        that module, like the ribbon logic it uses, only loads inside Excel.) """
+    return Path(__file__).with_name("data") / XLAM_NAME
 
 
 def addins_must_be_signed(version=None) -> bool:
@@ -652,13 +659,12 @@ def ribbon(kind: str, ini: str = None):
           xlam - xlOil.xlam in XLSTART: for computers whose policy requires signed add-ins
           off  - no ribbon tab
     """
-    from .xlam_ribbon import xlam_path, XLAM_NAME
     kind = kind.lower()
     if kind not in ("com", "xlam", "off"):
         raise ValueError("Choose com, xlam or off")
     target = _XL_START_PATH / XLAM_NAME
     if kind == "xlam":
-        src = xlam_path()
+        src = _xlam_source()
         if not src.exists():
             raise FileNotFoundError(f"{src} is missing: reinstall xlOil")
         _XL_START_PATH.mkdir(parents=True, exist_ok=True)
@@ -934,7 +940,7 @@ def doctor():
             elif needed:
                 ok(f"Conda PYTHONHOME set")
         signed_only = addins_must_be_signed()
-        xlam_installed = (_XL_START_PATH / "xlOil.xlam").exists()
+        xlam_installed = (_XL_START_PATH / XLAM_NAME).exists()
         if "xloil.xloil_ribbon" in text and signed_only:
             bad("Office policy requires signed add-ins, so the COM ribbon can't load "
                 "(you'd see a 'COM addin connect' error)", "Run `xloil ribbon xlam`")

@@ -4,6 +4,12 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post6
+
+- Fixed: `xloil ribbon xlam` (and so `xloil setup` on computers with the
+  signed-add-ins policy) failed with `'NoneType' object has no attribute 'settings'`:
+  it loaded the ribbon code, which only runs inside Excel.
+
 ## 0.22.1.post5
 
 - Fixed: `xloil setup` crashed with `ValueError: too many values to unpack` on
