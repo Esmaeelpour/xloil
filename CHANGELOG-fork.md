@@ -57,6 +57,22 @@ the `xloil` Python package and is opt-in.
   `XLOIL_STUBS=1`, or with the new `xloil-stubs` wheel). `xloil.testing` provides
   `call`, `take`, `spec`, `caller`, `fire_event`, `registered`, `pending` and `reset`.
 
+### Installation
+- **Conda support**: `xloil install`, `xloil create` and `xloil config python` set
+  `PYTHONHOME` for conda Pythons (base, envs, and venvs built on conda). Without it,
+  Python failed to start inside Excel ("failed to get the Python codec of the
+  filesystem encoding").
+- **`xloil doctor`** checks Excel/Python bitness, the VC++ runtime, the binaries for
+  this Python, required packages, the add-in install, download blocking and the
+  configured interpreter, and says how to fix each problem.
+- `pywin32` is now a required dependency on Windows (xlOil's Excel object model uses
+  it). New extras: `all`, `pandas`, `polars`, `plotting`, `qt`, `test`.
+- `xloil install` warns on Excel/Python bitness mismatch and removes the
+  internet-download mark that makes Office block XLLs.
+- `xloil create` also configures the settings file shipped with the binaries, so a
+  created add-in works on a computer where `xloil install` was never run.
+- New docs page: Installing on Another Computer.
+
 ### Fixes
 - `xloil.PauseExcel(...)` now honours its constructor arguments. Upstream always
   paused events, calculation, screen updating and alerts.

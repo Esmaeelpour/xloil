@@ -7,6 +7,7 @@ xlOil Python
     :caption: Contents
 
     GettingStarted
+    Installing
     NewFeatures
     Concepts
     Functions

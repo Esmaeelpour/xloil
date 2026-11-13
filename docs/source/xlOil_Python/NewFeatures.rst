@@ -125,6 +125,8 @@ Several items were already partly covered by xlOil, and this fork builds on them
 Quick start
 -----------
 
+Full instructions, including conda, venvs and distributing to colleagues: :doc:`Installing`.
+
 Install the wheel for your Python version from the GitHub release, then:
 
 .. code-block:: bat

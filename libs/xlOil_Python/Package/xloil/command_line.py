@@ -87,19 +87,74 @@ def _toml_lit_string(s:str):
     # TOML literal strings have a lot of quotes and escapes, this function does the encoding
     return "'''" + s.replace('\\','\\\\') + "'''"
 
+def _venv_home(exe: Path):
+    """ Returns the 'home' directory from a venv's pyvenv.cfg, or None if not a venv """
+    for cfg in [exe.parent / "pyvenv.cfg", exe.parent.parent / "pyvenv.cfg"]:
+        if cfg.exists():
+            for line in cfg.read_text(encoding='utf-8', errors='replace').splitlines():
+                key, sep, value = line.partition('=')
+                if sep and key.strip().lower() == 'home':
+                    return Path(value.strip())
+    return None
+
+
+def python_home_for(executable) -> str:
+    """
+        Returns the PYTHONHOME xlOil must set for the given python.exe, or None 
+        if none is needed.
+
+        Conda distributions (base installs and envs) do not let an embedded 
+        interpreter locate the standard library from python.exe alone: Python 
+        fails at start-up with "failed to get the Python codec of the filesystem
+        encoding". Setting PYTHONHOME to the installation directory fixes this.
+        For a venv created from a conda Python, the home is the base install
+        named in pyvenv.cfg; the venv itself is still picked up via 
+        PYTHONEXECUTABLE. python.org installs need nothing.
+    """
+    exe = Path(executable)
+    base = _venv_home(exe) or exe.parent
+    if (base / "conda-meta").is_dir():
+        return str(base)
+    return None
+
+
 def _get_python_paths():
     """
         Returns the paths to be set in the xlOil.ini file (the appropriate stubs
         must already exist).
     """
     return { 
-        'PYTHONEXECUTABLE': sys.executable
+        'PYTHONEXECUTABLE': sys.executable,
+        'PYTHONHOME': python_home_for(sys.executable),
     }
+
+
+def _set_ini_python_home(ini_txt: str, home) -> str:
+    """
+        Writes (or comments out, if `home` is None) a PYTHONHOME line in the
+        [xlOil_Python] environment block, next to PYTHONEXECUTABLE.
+    """
+    active = re.compile(r'^(\s*)PYTHONHOME\s*=.*$', re.M)
+    if home is None:
+        return active.sub(lambda m: m.group(1) + "#" + m.group(0).lstrip(), ini_txt)
+    line_value = "PYTHONHOME=" + "'''" + str(home) + "'''"
+    if active.search(ini_txt):
+        return active.sub(lambda m: m.group(1) + line_value, ini_txt, count=1)
+    exe_line = re.compile(r'^(\s*)PYTHONEXECUTABLE\s*=.*$', re.M)
+    m = exe_line.search(ini_txt)
+    if m is None:
+        return ini_txt
+    comment = m.group(1) + "# Needed for conda pythons, see xloil.command_line.python_home_for\n"
+    return ini_txt[:m.end()] + "\n" + comment + m.group(1) + line_value + ini_txt[m.end():]
 
 def _write_python_path_to_ini(ini_txt, bin_dir:str, comment_reg_keys:bool, replace_paths=None):
 
     if replace_paths is None:
         replace_paths = _get_python_paths()
+    replace_paths = dict(replace_paths)
+    if 'PYTHONEXECUTABLE' in replace_paths and 'PYTHONHOME' not in replace_paths:
+        replace_paths['PYTHONHOME'] = python_home_for(replace_paths['PYTHONEXECUTABLE'])
+    python_home = replace_paths.pop('PYTHONHOME', None)
 
     fails = 0
 
@@ -120,6 +175,10 @@ def _write_python_path_to_ini(ini_txt, bin_dir:str, comment_reg_keys:bool, repla
         
     # Set XLOIL_PATH
     check_replace(r'^(\s*XLOIL_PATH\s*=).*', r'\g<1>' + _toml_lit_string(str(bin_dir)))
+
+    ini_txt = _set_ini_python_home(ini_txt, python_home)
+    if python_home:
+        print(f"Conda python detected: setting PYTHONHOME={python_home}")
     
     # Comment out the now usused code to get the python paths from the registry
     # Don't error if this fails as it's not critical
@@ -131,6 +190,81 @@ def _write_python_path_to_ini(ini_txt, bin_dir:str, comment_reg_keys:bool, repla
     return ini_txt, fails == 0
     
    
+def _unblock(path):
+    """
+        Removes the Windows "Mark of the Web" (Zone.Identifier stream) from a file.
+        Office refuses to load XLL add-ins marked as downloaded from the internet,
+        e.g. when the binaries came from a browser-downloaded release zip.
+    """
+    try:
+        os.remove(str(path) + ":Zone.Identifier")
+        print(f"Unblocked {path} (removed internet download mark)")
+    except OSError:
+        pass
+
+
+def excel_path():
+    """ Returns the path of EXCEL.EXE from the registry, or None """
+    if reg is None:
+        return None
+    for root in (reg.HKEY_LOCAL_MACHINE, reg.HKEY_CURRENT_USER):
+        with suppress(OSError):
+            key = reg.OpenKey(root, r"Software\Microsoft\Windows\CurrentVersion\App Paths\excel.exe")
+            value, _ = reg.QueryValueEx(key, "")
+            if value and Path(value).exists():
+                return Path(value)
+    return None
+
+
+def excel_bitness():
+    """ Returns 64, 32 or None (unknown) for the installed Excel """
+    exe = excel_path()
+    if exe is None:
+        return None
+    try:
+        import struct
+        with open(exe, 'rb') as f:
+            f.seek(0x3C)
+            pe_offset = struct.unpack('<I', f.read(4))[0]
+            f.seek(pe_offset + 4)
+            machine = struct.unpack('<H', f.read(2))[0]
+        return {0x8664: 64, 0x14c: 32, 0xAA64: 64}.get(machine)
+    except OSError:
+        return None
+
+
+def _check_bitness():
+    import struct
+    py_bits = struct.calcsize("P") * 8
+    xl_bits = excel_bitness()
+    if xl_bits is not None and xl_bits != py_bits:
+        print(f"WARNING: Excel is {xl_bits}-bit but this Python is {py_bits}-bit. The add-in "
+              f"will not load: install a {xl_bits}-bit Python and the matching xlOil build.")
+        return False
+    return True
+
+
+def _configure_bundled_ini(bin_dir: Path):
+    """
+        Writes this Python's paths into the xlOil.ini shipped next to the binaries
+        if it has none. The core add-in reads that file when no %APPDATA% settings
+        exist, e.g. when only `xloil create` has been run on this computer.
+    """
+    ini = bin_dir / INIFILE_NAME
+    try:
+        text = ini.read_text(encoding='utf-8')
+    except OSError:
+        return
+    if re.search(r"^\s*PYTHONEXECUTABLE\s*=\s*'''\s*\S", text, flags=re.M) and \
+            not re.search(r"^\s*PYTHONEXECUTABLE\s*=\s*'''<", text, flags=re.M):
+        return
+    text, ok = _write_python_path_to_ini(text, bin_dir, comment_reg_keys=True)
+    if ok:
+        with suppress(OSError):
+            ini.write_text(text, encoding='utf-8')
+            print(f"Configured {ini} for {sys.executable}")
+
+
 def install_xloil(ini_template:str=None, 
                   addin_name=None,
                   replace_ini=False, 
@@ -155,8 +289,14 @@ def install_xloil(ini_template:str=None,
 
     bin_dir = _get_xloil_bin_dir()
 
+    _check_bitness()
+
     # Copy the XLL
     sh.copy(bin_dir / ADDIN_NAME, _XLL_INSTALL_PATH)
+    _unblock(_XLL_INSTALL_PATH)
+    for f in bin_dir.iterdir():
+        if f.suffix.lower() in ('.dll', '.pyd', '.xll'):
+            _unblock(f)
     print("Installed ", _XLL_INSTALL_PATH)
     
     # Copy the ini file to APPDATA, avoiding overwriting any existing ini
@@ -221,6 +361,8 @@ def _create_addin(filename):
 
     sh.copy(bin_dir / ADDIN_NAME,    xll_path)
     sh.copy(bin_dir / INIFILE_NAME,  ini_path)
+    _unblock(xll_path)
+    _configure_bundled_ini(bin_dir)
     
     print("New addin created at:", xll_path)
 
@@ -234,7 +376,7 @@ def _create_addin(filename):
     ini_txt, success = _write_python_path_to_ini(ini_txt, bin_dir, 
                                                  comment_reg_keys=True)
     
-    ini_path.write_text(ini_txt)
+    ini_path.write_text(ini_txt, encoding='utf-8')
 
     print("xlOil_Python plugin enabled using python installed at: ", sys.prefix)
  
@@ -458,6 +600,112 @@ def _intellisense_cmd(action, target_dir=None):
             print(f"{path} not found")
 
 
+def doctor():
+    """
+        Checks the things which most often stop xlOil loading on a new computer
+        and prints what to do about each problem. Returns the number of problems.
+    """
+    import importlib.util
+    import struct
+    problems = 0
+
+    def ok(msg):
+        print(f"  [ OK ] {msg}")
+
+    def bad(msg, fix):
+        nonlocal problems
+        problems += 1
+        print(f"  [FAIL] {msg}\n         -> {fix}")
+
+    def warn(msg):
+        print(f"  [WARN] {msg}")
+
+    print("xlOil doctor\n")
+    py_bits = struct.calcsize("P") * 8
+    ver = f"{sys.version_info.major}{sys.version_info.minor}"
+
+    exe = excel_path()
+    if exe is None:
+        bad("Excel not found", "Install Microsoft Excel (desktop, 2013 or later)")
+    else:
+        ok(f"Excel: {exe}")
+        bits = excel_bitness()
+        if bits is not None and bits != py_bits:
+            bad(f"Excel is {bits}-bit, Python is {py_bits}-bit",
+                f"Use a {bits}-bit Python with a {bits}-bit xlOil build")
+        elif bits is not None:
+            ok(f"Excel and Python are both {bits}-bit")
+
+        runtime = ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"]
+        system32 = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+        missing = [d for d in runtime if not (exe.parent / d).exists() and not (system32 / d).exists()]
+        if missing:
+            bad(f"Visual C++ runtime missing: {', '.join(missing)}",
+                "Install the Microsoft Visual C++ Redistributable (x64): "
+                "https://aka.ms/vs/17/release/vc_redist.x64.exe")
+        else:
+            ok("Visual C++ runtime available")
+
+    try:
+        bin_dir = _get_xloil_bin_dir()
+        ok(f"xlOil binaries: {bin_dir}")
+        pyd = bin_dir / f"xlOil_Python{ver}.pyd"
+        if pyd.exists():
+            ok(f"Extension for Python {sys.version_info.major}.{sys.version_info.minor}: {pyd.name}")
+        else:
+            bad(f"No xlOil extension for Python {sys.version_info.major}.{sys.version_info.minor}",
+                "Install the xloil wheel built for this Python version")
+        if any(Path(str(f) + ":Zone.Identifier").exists() for f in [bin_dir / ADDIN_NAME]):
+            bad("xlOil binaries are marked as downloaded from the internet",
+                "Run `xloil install` again (it unblocks them) or Unblock in the file Properties")
+    except Exception as e:
+        bad(f"xlOil binaries not found ({e})", "pip install the xloil wheel, then run `xloil install`")
+
+    for mod, pip_name in [("numpy", "numpy"), ("win32com", "pywin32"), ("tomlkit", "tomlkit")]:
+        if importlib.util.find_spec(mod) is None:
+            bad(f"Python package '{mod}' missing", f"pip install {pip_name}")
+        else:
+            ok(f"Python package '{mod}' available")
+
+    home = python_home_for(sys.executable)
+    ini = _ini_path()
+    if not _XLL_INSTALL_PATH.exists():
+        warn(f"xlOil.xll not in XLSTART: run `xloil install` (or load an add-in made by `xloil create`)")
+    else:
+        ok(f"Add-in installed: {_XLL_INSTALL_PATH}")
+        _, blocked = _XLL_INSTALL_PATH, Path(str(_XLL_INSTALL_PATH) + ":Zone.Identifier").exists()
+        if blocked:
+            bad("Installed add-in is blocked (Mark of the Web)", "Run `xloil install` again")
+
+    if ini.exists():
+        text = ini.read_text(encoding='utf-8')
+        m = re.search(r"^\s*PYTHONEXECUTABLE\s*=\s*'''(.*?)'''", text, flags=re.M)
+        configured = m.group(1).replace('\\\\', '\\') if m else ""
+        if not configured:
+            bad("PYTHONEXECUTABLE not set in settings", "Run `xloil install`")
+        elif not Path(configured).exists():
+            bad(f"PYTHONEXECUTABLE points to a missing file: {configured}",
+                "Run `xloil config python <path to python.exe>`")
+        else:
+            ok(f"Settings use Python: {configured}")
+            needed = python_home_for(configured)
+            has_home = re.search(r"^\s*PYTHONHOME\s*=", text, flags=re.M) is not None
+            if needed and not has_home:
+                bad("Conda Python without PYTHONHOME: Python will fail to start in Excel",
+                    f"Run `xloil config python \"{configured}\"` to add it")
+            elif needed:
+                ok(f"Conda PYTHONHOME set")
+    else:
+        warn(f"No settings file at {ini}: run `xloil install`")
+
+    if 'conda' in sys.version.lower() or (Path(sys.prefix) / "conda-meta").exists():
+        warn("Conda environment: install Qt with conda (conda install pyside6 or pyqt) rather "
+             "than pip, to avoid Qt DLL clashes with the environment's Library\\bin")
+
+    print(f"\n{problems} problem(s) found" if problems else "\nNo problems found")
+    return problems
+
+
 def main():
     parser = ArgumentParser(prog='xlOil', 
                             description='Excel/Python integration')
@@ -484,6 +732,9 @@ def main():
 
     p = subparsers.add_parser('status', help='Shows where xlOil is installed and how it is configured')
     p.set_defaults(func=status)
+
+    p = subparsers.add_parser('doctor', help='Checks for common problems which stop xlOil loading')
+    p.set_defaults(func=doctor)
 
     p = subparsers.add_parser('config', help='Reads or changes settings in xlOil.ini')
     config_sub = p.add_subparsers()

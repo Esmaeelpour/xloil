@@ -16,6 +16,9 @@ xlOil
 > | Dev tools | Excel-DNA IntelliSense tooltips; `xloil.reload()`; `xloil status/config` CLI; `StartupScript`; stub mode + `xloil.testing` + `xloil-stubs` wheel |
 >
 > Binaries and wheels: [GitHub Releases](https://github.com/Esmaeelpour/xloil/releases).
+> Install (python.org, conda or venv; 64-bit Excel and Python 3.9–3.14):
+> `pip install xloil-<version>-cp3XX-cp3XX-win_amd64.whl`, then `xloil install`, then `xloil doctor`.
+> See [Installing on Another Computer](docs/source/xlOil_Python/Installing.rst).
 
 xlOil provides framework for interacting with Excel in different programming
 languages. It gives a way to write functions in a language and have them 

@@ -655,3 +655,53 @@ def test_cli_help_runs(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["xloil"])
     cl.main()
     assert "install" in capsys.readouterr().out
+
+
+# ------------------------------------------------------------ conda support
+
+def test_python_home_for_conda_venv_and_plain(tmp_path):
+    from xloil.command_line import python_home_for
+    conda = tmp_path / "miniconda"
+    (conda / "conda-meta").mkdir(parents=True)
+    (conda / "python.exe").write_text("")
+    assert python_home_for(conda / "python.exe") == str(conda)
+
+    env = conda / "envs" / "py311"
+    (env / "conda-meta").mkdir(parents=True)
+    assert python_home_for(env / "python.exe") == str(env)
+
+    venv = tmp_path / "venv"
+    (venv / "Scripts").mkdir(parents=True)
+    (venv / "pyvenv.cfg").write_text(f"home = {conda}\ninclude-system-site-packages = false\n")
+    assert python_home_for(venv / "Scripts" / "python.exe") == str(conda)
+
+    plain = tmp_path / "Python311"
+    plain.mkdir()
+    assert python_home_for(plain / "python.exe") is None
+
+
+def test_ini_python_home_written_and_removed(ini_copy):
+    from xloil.command_line import _write_python_path_to_ini, _set_ini_python_home
+    import tomlkit
+    text = ini_copy.read_text(encoding="utf-8")
+    out, ok = _write_python_path_to_ini(text, r"C:\xloil\bin", True,
+        replace_paths={'PYTHONEXECUTABLE': r'C:\conda\python.exe', 'PYTHONHOME': r'C:\conda'})
+    assert ok
+    doc = tomlkit.parse(out)
+    env = [e for e in doc['xlOil_Python']['Environment'] if 'PYTHONEXECUTABLE' in e][0]
+    assert env['PYTHONHOME'] == r'C:\conda'
+    # Idempotent: a second write replaces rather than duplicates
+    out2 = _set_ini_python_home(out, r'D:\other')
+    assert out2.count("PYTHONHOME='''") == 1 and r"D:\other" in out2
+    # Switching to a non-conda python comments it out
+    out3 = _set_ini_python_home(out2, None)
+    env3 = [e for e in tomlkit.parse(out3)['xlOil_Python']['Environment'] if 'PYTHONEXECUTABLE' in e][0]
+    assert 'PYTHONHOME' not in env3
+
+
+def test_doctor_runs_without_excel(capsys):
+    from xloil import command_line as cl
+    problems = cl.doctor()
+    out = capsys.readouterr().out
+    assert "xlOil doctor" in out
+    assert isinstance(problems, int)

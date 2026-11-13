@@ -97,14 +97,17 @@ setup(
     python_requires=f'>=3.6',
     install_requires=[
         'numpy>=1.18',
-        'tomlkit'
+        'tomlkit',
+        # xloil.app() and the Excel object model use win32com by default
+        'pywin32; sys_platform == "win32"',
     ],
     extras_require={
-        "com": ["pywin32"],
+        "com": ["pywin32", "comtypes"],
         "pandas": ["pandas"],
         "polars": ["polars"],
         "qt": ["qtpy", "PySide6"],
         "plotting": ["matplotlib", "plotly", "qtpy", "PySide6"],
+        "all": ["pandas", "polars", "matplotlib", "plotly", "qtpy", "PySide6"],
         "test": ["pytest", "pandas", "polars", "matplotlib"],
     },
     classifiers=[

@@ -56,6 +56,8 @@ watcher can't see, such as an edited dependency or a config file:
 Command-line installer
 ----------------------
 
+See also :doc:`Installing` for installing on other computers, conda and venvs.
+
 After ``pip install`` of the wheel:
 
 .. code-block:: bat
@@ -65,6 +67,7 @@ After ``pip install`` of the wheel:
     xloil install --load-modules xloil.xloil_ribbon,xloil.plotting,mymod
     xloil install --startup-script C:\addins\startup.py --intellisense
     xloil status                                :: what's installed and how it's configured
+    xloil doctor                                :: check for problems that stop xlOil loading
     xloil config list
     xloil config get xlOil_Python.LoadModules
     xloil config set xlOil_Python.LoadModules "['xloil.xloil_ribbon', 'mymod']"
