@@ -188,6 +188,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -l dist
+          # A release published by hand from verified artifacts is left untouched
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists: not replacing its files"
+            exit 0
+          fi
           gh release create "${GITHUB_REF_NAME}" dist/* \
             --title "xlOil ${GITHUB_REF_NAME} (PyXLL-parity fork)" \
             --notes-file CHANGELOG-fork.md
