@@ -4,6 +4,18 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post12
+
+- Fixed (C++, event sink): an event that returned early (a wrong argument count, an ignored VBA error) skipped
+  popping xlOil's re-entrancy stack. The stale entry made every later event of that kind look re-entrant, so it was
+  dropped (`SheetSelectionChange`, `SheetChange`, `SheetActivate`, `SheetCalculate` check the stack), and after 16 such
+  returns the stack array was overrun. The entry is now popped on every way out, and a nesting deeper than the stack
+  drops the event instead of overrunning it.
+- Docs corrected: post11's note said `SheetSelectionChange` and `SheetBeforeRightClick` do not reach Python; they do
+  (re-tested: the earlier test registered a lambda, which xlOil holds weakly and dropped). `SheetBeforeDoubleClick`
+  was not raised by Excel for an automated double-click, to any listener; the Events page says so and how to make a
+  button that works everywhere.
+
 ## 0.22.1.post11
 
 (The v0.22.1.post10 tag's build failed on the Linux test runners: the workbook name was split with the host's
