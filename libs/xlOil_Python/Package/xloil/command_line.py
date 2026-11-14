@@ -18,9 +18,26 @@ _XLL_INSTALL_PATH = _XL_START_PATH / ADDIN_NAME
 def _excel_regpath(version):
     return rf"Software\Microsoft\Office\{version}\Excel"
 
+_NO_EXCEL = ("Excel was not found on this computer. Install 64-bit desktop Excel (Microsoft 365, or 2016 or later), "
+             "start it once, then run the installer again (or `python -m xloil.command_line install`).")
+
+
+def _excel_installed() -> bool:
+    """ True if Excel is registered: its program path, or its version key, which `install` needs """
+    if excel_path() is not None:
+        return True
+    try:
+        _find_excel_version()
+        return True
+    except OSError:
+        return False
+
+
 def _find_excel_version():
     # Will fetch a value like "Excel.Application.16"
     # Note for Office 2019, it still gives version 16...hmm
+    if reg is None:
+        raise OSError("no Windows registry here")
     verstr = reg.QueryValue(reg.HKEY_CLASSES_ROOT, r"Excel.Application\CurVer")
     return int(verstr.replace('Excel.Application.',''))
 
@@ -275,7 +292,10 @@ def install_xloil(ini_template:str=None,
     if addin_name is None:
         addin_name = ADDIN_NAME
         
-    excel_version = _find_excel_version()
+    try:
+        excel_version = _find_excel_version()
+    except OSError:
+        raise SystemExit(_NO_EXCEL)       # was a FileNotFoundError traceback on a computer without Excel
 
     # Just in case we got put in Excel's naughty corner for misbehaving addins
     _remove_from_resiliancy(ADDIN_NAME, excel_version)
@@ -862,6 +882,9 @@ def setup(features: str = None, yes: bool = False, no_pip: bool = False, intelli
         print(f"Conda installation detected ({home}): PYTHONHOME will be set automatically")
     if not _check_bitness():
         print("Fix the bitness mismatch first, then run `xloil setup` again.")
+        return 1
+    if not _excel_installed():          # before any pip installs (they used to run, then install crashed)
+        print(_NO_EXCEL)
         return 1
     print()
 

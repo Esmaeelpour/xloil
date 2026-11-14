@@ -3,7 +3,7 @@
     any compiled parts, always running in stub mode. Install it on Linux/macOS
     (or in Windows CI without Excel) to import and unit test code that uses xloil.
 
-        python tools/build_stubs_wheel.py --version 0.22.1.post18
+        python tools/build_stubs_wheel.py --version 0.22.1.post19
 
     The wheel is written to build/dist. Do not install it alongside the full
     ``xloil`` package: both provide the ``xloil`` module.
