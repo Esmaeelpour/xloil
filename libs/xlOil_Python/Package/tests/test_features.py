@@ -1205,3 +1205,16 @@ def test_installer_help_block_closes_once():
         pytest.skip("not in the source tree")
     text = p.read_text(encoding="utf-8")
     assert text.startswith("<#") and text.count("#>") == 1 and text.count("<#") == 1
+
+
+def test_xloattr_calls_builtin_methods():
+    """=xloAttr("abc","upper") returned the method uncalled (built-ins are neither ismethod nor isfunction);
+    routines are called with the given arguments, other attributes and classes are returned as they are"""
+    from xloil import excelfuncs as ef
+    assert ef._xlo_attr_helper("python works", "upper") == "PYTHON WORKS"
+    assert ef._xlo_attr_helper("a,b", "split", ",") == ["a", "b"]
+    assert ef._xlo_attr_helper({"k": 1}, "get", "k") == 1
+    assert ef._xlo_attr_helper(dt.date(2026, 1, 2), "isoformat") == "2026-01-02"
+    assert ef._xlo_attr_helper(dt.date(2026, 1, 2), "year") == 2026
+    import collections
+    assert ef._xlo_attr_helper(collections, "OrderedDict") is collections.OrderedDict
