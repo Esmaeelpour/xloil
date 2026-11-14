@@ -359,7 +359,8 @@ def _fix_name_errors_later(workbook_name, wait=1000):
         try:
             from .com import fix_name_errors
             from ._core import workbooks
-            wb = workbooks[os.path.basename(workbook_name)]
+            import ntpath                           # Excel's paths are Windows paths (also when tested elsewhere)
+            wb = workbooks[ntpath.basename(workbook_name)]
             fix_name_errors(wb)
         except Exception as e:
             log.warn("Could not refresh #NAME? cells in %s: %s (use the ribbon's Fix #NAME? errors)", workbook_name, e)

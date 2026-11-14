@@ -4,7 +4,10 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
-## 0.22.1.post10
+## 0.22.1.post11
+
+(The v0.22.1.post10 tag's build failed on the Linux test runners: the workbook name was split with the host's
+path rules; fixed with Windows path rules. post11 is that work, released.)
 
 Lessons from a large workbook module (a bridge design workbook) run in real Excel:
 
