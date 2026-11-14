@@ -291,13 +291,21 @@ namespace xloil
         LCID /*lcid*/, WORD /*wFlags*/, DISPPARAMS* pdispparams, VARIANT* /*pvarResult*/,
         EXCEPINFO* pexcepinfo, UINT* /*puArgErr*/)
       {
+        // Note the event being processed. The event handling is single-threaded
+        // but can be re-entrant. See comment for inStack. The entry is popped on
+        // every way out: the early returns below (a wrong argument count, an
+        // ignored VBA error) used to skip the pop, leaving a stale entry that made
+        // inStack() drop every later event of that kind, and after 16 of them the
+        // push wrote past the end of _eventStack.
+        constexpr char maxDepth = (char)(sizeof(_eventStack) / sizeof(_eventStack[0]));
+        if (_stackCount >= maxDepth)
+          return S_OK; // nested too deep: drop the event rather than overrun the stack
+        _eventStack[_stackCount++] = (unsigned short)dispidMember;
+        struct PopStack { char& n; ~PopStack() { --n; } } popStack{ _stackCount };
+
         try
         {
           auto* rgvarg = pdispparams->rgvarg;
-
-          // Note the event being processed. The event handling is single-threaded
-          // but can be re-entrant. See comment for inStack
-          _eventStack[_stackCount++] = (unsigned short) dispidMember;
 
           // These dispids are copied from oleview and are in the same order as listed there
           switch (dispidMember)
@@ -400,11 +408,8 @@ namespace xloil
         {
           XLO_ERROR("Error during COM event handler callback: {0}", e.what());
         }
-       
-        // Pop the stack
-        --_stackCount;
 
-        return S_OK;
+        return S_OK; // popStack pops the event stack
       }
 
     private:

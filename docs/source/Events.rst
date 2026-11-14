@@ -52,11 +52,14 @@ chart sheet). Takes two paramters:
 * Target / selected Range
 
 .. note::
-    On some Excel 365 setups the ``SheetBeforeDoubleClick``, ``SheetBeforeRightClick`` and ``SheetSelectionChange``
-    events never reach Python handlers (seen with fork 0.22.1.post9: the handlers were registered, double-clicks went
-    straight to cell editing). ``SheetChange`` and ``SheetActivate`` arrive. For a "button" on a sheet without macros,
-    give the cell a data-validation list with a "Run it now" item and act on ``SheetChange`` when that item is
-    picked, then put the button text back.
+    Keep a reference to every handler you add (a module-level function, or store it): xlOil holds handlers weakly,
+    so ``xlo.event.SheetBeforeRightClick += lambda *a: ...`` is dropped at once and never runs.
+
+    ``SheetBeforeDoubleClick`` is raised by Excel only for some double-clicks: on an Excel 365 test machine an
+    automated double-click put the cell into edit mode without the event reaching any listener (xlOil or a pywin32
+    sink alike). For a "button" on a sheet without macros, give the cell a data-validation list with a "Run it now"
+    item and act on ``SheetChange`` when that item is picked (then put the button text back); keep the double-click
+    handler as a second way.
 
 SheetBeforeDoubleClick
 ----------------------
