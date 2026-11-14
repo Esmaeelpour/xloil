@@ -9,7 +9,7 @@ on:
 
 jobs:
   one-liner:
-    name: One-liner (py${{ matrix.python }}${{ matrix.excel && ', with Excel' || '' }}${{ matrix.signed && ', signed add-ins policy' || '' }})
+    name: One-liner (py${{ matrix.python }}${{ matrix.excel && ', with Excel' || '' }}${{ matrix.signed && ', signed add-ins policy' || '' }}${{ matrix.office && format(', {0}', matrix.office) || '' }})
     runs-on: windows-latest
     timeout-minutes: 90
     strategy:
@@ -24,6 +24,10 @@ jobs:
           - python: '3.12'
             excel: true
             signed: true
+          # Another Office line: perpetual-licence Office 2019 (volume channel), not Microsoft 365
+          - python: '3.12'
+            excel: true
+            office: office2019
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,8 +38,37 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Install Office 2019 Excel (64-bit, volume channel)
+        if: matrix.office == 'office2019'
+        shell: pwsh
+        timeout-minutes: 60
+        run: |
+          $cfg = "$env:RUNNER_TEMP\office2019.xml"
+          @'
+          <Configuration>
+            <Add OfficeClientEdition="64" Channel="PerpetualVL2019">
+              <Product ID="ProPlus2019Volume">
+                <Language ID="en-us" />
+                <ExcludeApp ID="Access" /><ExcludeApp ID="Groove" /><ExcludeApp ID="Lync" /><ExcludeApp ID="OneDrive" />
+                <ExcludeApp ID="OneNote" /><ExcludeApp ID="Outlook" /><ExcludeApp ID="PowerPoint" />
+                <ExcludeApp ID="Publisher" /><ExcludeApp ID="Teams" /><ExcludeApp ID="Word" />
+              </Product>
+            </Add>
+            <Updates Enabled="FALSE" />
+            <Display Level="None" AcceptEULA="TRUE" />
+          </Configuration>
+          '@ | Set-Content $cfg
+          for ($i = 1; $i -le 3; $i++) {
+            choco install office2019proplus --no-progress -y --params "'/ConfigPath:$cfg'"
+            if ($LASTEXITCODE -eq 0) { break }
+            Write-Host "Office 2019 install attempt $i failed with $LASTEXITCODE, retrying in 60s"
+            Start-Sleep -Seconds 60
+          }
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $v = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration" -ErrorAction SilentlyContinue)
+          Write-Host "Installed: $($v.ProductReleaseIds) $($v.VersionToReport) $($v.Platform)"
       - name: Install Excel (so doctor checks it too)
-        if: matrix.excel
+        if: matrix.excel && !matrix.office
         shell: pwsh
         timeout-minutes: 60
         run: |
