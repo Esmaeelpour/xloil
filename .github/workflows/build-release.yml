@@ -35,7 +35,7 @@ concurrency:
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
-  PACKAGE_VERSION: 0.22.1.post15
+  PACKAGE_VERSION: 0.22.1.post16
 
 permissions:
   contents: read
@@ -63,6 +63,15 @@ jobs:
         env:
           XLOIL_STUBS: '1'
         run: python -m pytest tests -v
+      - name: Installer parses in Windows PowerShell 5.1 (as iex (irm ...) runs it)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $text = Get-Content tools/install.ps1 -Raw
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseInput($text, [ref]$null, [ref]$errors)
+          if ($errors) { $errors | ForEach-Object { Write-Host "$($_.Extent.StartLineNumber): $($_.Message)" }; exit 1 }
+          Write-Host "install.ps1 parses"
 
   stubs-wheel:
     name: Build xloil-stubs wheel

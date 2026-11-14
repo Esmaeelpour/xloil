@@ -10,14 +10,17 @@
     Run from a normal PowerShell window (in an activated conda env or venv if
     you want xlOil to use that environment):
 
-        powershell -ExecutionPolicy Bypass -c "irm https://github.com/Esmaeelpour/xloil/releases/latest/download/install.ps1 | iex"
+        powershell -ExecutionPolicy Bypass -c "iex (irm https://github.com/Esmaeelpour/xloil/releases/latest/download/install.ps1)"
+
+    (Not `irm ... | iex`: in a conda-initialised Windows PowerShell 5.1 that form fails with
+    a "terminator is missing from the multiline comment" parse error.)
 
     Or download it and run with options:
 
         .\install.ps1 -Python C:\envs\risk\python.exe -Features pandas,charts,qt -Yes
 
 .PARAMETER Python
-    The python.exe to use. Default: the active conda env / venv, then `py -3`, then `python`.
+    The python.exe to use. Default: the active venv, then the active conda env, then `py -3`, then `python`.
 .PARAMETER Features
     Comma-separated features for `xloil setup` (pandas,polars,charts,qt,intellisense,cache).
     If omitted, setup asks.
@@ -77,8 +80,10 @@ if ($Python) {
     if (-not $r.ok) { $failures += "$Python : $($r.why)" } else { $Python = $r.exe }
 } else {
     $candidates = @()
-    if ($env:CONDA_PREFIX -and (Test-Path "$env:CONDA_PREFIX\python.exe")) { $candidates += ,@("$env:CONDA_PREFIX\python.exe", @()) }
+    # An activated venv first: conda-initialised shells always have base active, so CONDA_PREFIX is set even when
+    # the venv activated on top of it is the Python you mean
     if ($env:VIRTUAL_ENV -and (Test-Path "$env:VIRTUAL_ENV\Scripts\python.exe")) { $candidates += ,@("$env:VIRTUAL_ENV\Scripts\python.exe", @()) }
+    if ($env:CONDA_PREFIX -and (Test-Path "$env:CONDA_PREFIX\python.exe")) { $candidates += ,@("$env:CONDA_PREFIX\python.exe", @()) }
     if (Get-Command py -ErrorAction SilentlyContinue) { $candidates += ,@("py", @("-3")) }
     if (Get-Command python -ErrorAction SilentlyContinue) { $candidates += ,@("python", @()) }
     foreach ($c in $candidates) {

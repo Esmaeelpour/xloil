@@ -29,11 +29,11 @@ Excel to use first) and run:
 
 .. code-block:: powershell
 
-    powershell -ExecutionPolicy Bypass -c "irm https://github.com/Esmaeelpour/xloil/releases/latest/download/install.ps1 | iex"
+    powershell -ExecutionPolicy Bypass -c "iex (irm https://github.com/Esmaeelpour/xloil/releases/latest/download/install.ps1)"
 
 The installer:
 
-1. finds your Python (the active conda env or venv, otherwise ``py -3``, otherwise
+1. finds your Python (the active venv, then the active conda env, otherwise ``py -3``, otherwise
    ``python``) and checks it is 64-bit;
 2. downloads the matching wheel from the latest GitHub release and installs it;
 3. runs ``xloil setup``, which asks which features you want, pip-installs the
@@ -52,7 +52,7 @@ command prompt *in the Python environment you want Excel to use*:
 
 .. code-block:: bat
 
-    pip install xloil-0.22.1.post15-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post16-cp312-cp312-win_amd64.whl
     xloil setup
 
 ``xloil setup`` is the guided set-up. ``--features pandas,polars,charts,qt,intellisense,cache``
@@ -122,7 +122,7 @@ Optional extras install the libraries for particular features:
 
 .. code-block:: bat
 
-    pip install "xloil-0.22.1.post15-cp312-cp312-win_amd64.whl[all]"      :: everything below
+    pip install "xloil-0.22.1.post16-cp312-cp312-win_amd64.whl[all]"      :: everything below
     pip install "xloil-...whl[pandas]"      :: DataFrames
     pip install "xloil-...whl[polars]"      :: polars
     pip install "xloil-...whl[plotting]"    :: matplotlib, plotly, Qt WebEngine charts
@@ -139,7 +139,7 @@ environment*:
 
     conda create -n xl python=3.12 pandas
     conda activate xl
-    pip install xloil-0.22.1.post15-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post16-cp312-cp312-win_amd64.whl
     xloil install
 
 Unlike python.org installs, an embedded conda interpreter cannot find its
@@ -256,6 +256,8 @@ filesystem encoding" in ``xlOil.log``                  ``xloil config python <en
 Interactive charts show as pictures                    No Qt WebEngine: ``pip install PySide6`` and load
                                                        ``xloil.gui.qtpy`` before ``xloil.plotting``
 "is not a valid Win32 application"                     32-bit Excel or Python: use 64-bit for both
+"The terminator '#>' is missing from the               The older ``irm ... | iex`` form of the one-line
+multiline comment" from the one-line installer         command; use ``iex (irm ...)`` as shown above
 Functions using ``xloil.app()`` fail                   ``pip install pywin32``
 =====================================================  =================================================
 
