@@ -122,8 +122,6 @@ prominent Excel addin software.
 - XLL Plus: (commercial) seems to be fully-featured with GUI wizards
   to help developers, but only for C++ and the most expensive sofware 
   here.
-- PyXLL: (commercial) Python-only.  Supports the full range of Excel
-  API features and some functionality to run on remote servers.
 - XlWings: (mostly free) Python-only. More mature sofware, but considerably
   slower (2000x in my test case) than xlOil due to use of slower APIs.
   Can only create 'local' functions backed by VBA, so every Excel sheet needs

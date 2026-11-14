@@ -331,7 +331,7 @@ External libraries
 Fork Features
 -------------
 
-These modules are added by the PyXLL-parity fork, see :doc:`NewFeatures`.
+These modules are added by this fork, see :doc:`NewFeatures`.
 
 .. currentmodule:: xloil
 

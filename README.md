@@ -2,7 +2,7 @@ xlOil
 =====
 
 > **This is a fork of [cunnane/xloil](https://github.com/cunnane/xloil)** that adds
-> features closing the main gaps with PyXLL. All additions are in the Python package
+> features for charts, sheet widgets, data handling and developer tools. All additions are in the Python package
 > and are opt-in; the compiled add-in is unchanged. See
 > [Fork Features](docs/source/xlOil_Python/NewFeatures.rst) for the full list and
 > [CHANGELOG-fork.md](CHANGELOG-fork.md) for what changed.
@@ -19,6 +19,7 @@ xlOil
 > Install (python.org, conda or venv; 64-bit Excel and Python 3.9–3.14):
 > `pip install xloil-<version>-cp3XX-cp3XX-win_amd64.whl`, then `xloil install`, then `xloil doctor`.
 > See [Installing on Another Computer](docs/source/xlOil_Python/Installing.rst).
+> Then [How to Use xlOil](docs/source/xlOil_Python/HowToUse.rst): your first function, everyday recipes and fixes.
 
 xlOil provides framework for interacting with Excel in different programming
 languages. It gives a way to write functions in a language and have them 

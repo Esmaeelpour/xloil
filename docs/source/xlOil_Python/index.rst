@@ -8,6 +8,7 @@ xlOil Python
 
     GettingStarted
     Installing
+    HowToUse
     NewFeatures
     Concepts
     Functions

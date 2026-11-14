@@ -2,10 +2,9 @@
 Stability and Support
 =====================
 
-PyXLL's biggest advantage over xlOil is not any single feature. It is a
-commercial product with paid support and a strong backward-compatibility
-commitment. An open-source fork cannot match a support contract, but it can be
-clear about what it promises. This page states those promises for the fork.
+Commercial Excel add-in products come with paid support and strong
+backward-compatibility commitments. An open-source fork cannot match a support
+contract, but it can be clear about what it promises. This page states those promises for the fork.
 
 Compatibility
 -------------
