@@ -1069,3 +1069,46 @@ def test_excel_array_like_excel():
     assert a.shape == (2, 3) and a.dtype == object
     with pytest.raises(ValueError):
         bool(a or [])
+
+
+def test_remove_takes_the_ribbon_too(tmp_path, monkeypatch, capsys):
+    """xloil remove / uninstall takes the add-in and the xlOil.xlam ribbon out of XLSTART (the xlam calls xlOil: left
+    alone it errored at every Excel start); IntelliSense stays (named); a file Excel holds gives a clear message"""
+    import xloil.command_line as cl
+    from xloil.intellisense import default_xll_name
+    xlstart = tmp_path / "XLSTART"
+    xlstart.mkdir()
+    for n in ("xlOil.xll", "xlOil.xlam", default_xll_name(), "other.xlam"):
+        (xlstart / n).write_bytes(b"x")
+    monkeypatch.setattr(cl, "_XL_START_PATH", xlstart)
+    monkeypatch.setattr(cl, "_XLL_INSTALL_PATH", xlstart / "xlOil.xll")
+    monkeypatch.setattr(cl, "_find_excel_version", lambda: 16)
+    monkeypatch.setattr(cl, "_remove_addin", lambda version, path: None)
+    cl._remove_xloil()
+    assert sorted(p.name for p in xlstart.iterdir()) == sorted([default_xll_name(), "other.xlam"])
+    assert "intellisense remove" in capsys.readouterr().out
+    (xlstart / "xlOil.xll").write_bytes(b"x")
+    real_remove = cl.os.remove
+    def locked(path):
+        raise PermissionError(13, "in use")
+    monkeypatch.setattr(cl.os, "remove", locked)
+    with pytest.raises(SystemExit, match="close every Excel window|Close every Excel window"):
+        cl._remove_xloil()
+    monkeypatch.setattr(cl.os, "remove", real_remove)
+
+
+def test_clean_waits_for_pip_and_removes_logs(tmp_path, monkeypatch):
+    """xloil clean deletes the settings and every xlOil log, then waits for pip (its output came after the prompt)"""
+    import subprocess
+    import xloil.command_line as cl
+    app = tmp_path / "xlOil"
+    app.mkdir()
+    for n in ("xlOil.ini", "xlOil.log", "xlOil.1234.log", "xlOil.ini.before-debug.bak"):
+        (app / n).write_text("x")
+    monkeypatch.setattr(cl, "APP_DATA_DIR", str(app))
+    monkeypatch.setattr(cl, "_remove_xloil", lambda: None)
+    ran = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **k: ran.append(cmd))
+    cl._clean_xloil()
+    assert sorted(p.name for p in app.iterdir()) == ["xlOil.ini.before-debug.bak"]
+    assert ran and ran[0][-3:] == ["uninstall", "--yes", "xloil"]

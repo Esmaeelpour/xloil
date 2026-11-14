@@ -326,30 +326,51 @@ def install_xloil(ini_template:str=None,
         print(f'Edited {ini_path} to point to {sys.prefix} python distribution.')
 
 def _remove_xloil():
-
-    excel_version = _find_excel_version()
-    
-    # Ensure no xlOil addins are in the registry
-    _remove_addin(excel_version, _XLL_INSTALL_PATH)
+    """
+        Removes xlOil from Excel: the add-in and the xlOil.xlam ribbon from XLSTART (the ribbon's macros call
+        xlOil, so left alone it showed errors at every Excel start), and the add-in's registry entries. The settings
+        file stays. The IntelliSense add-in, which other add-ins can use too, stays: `xloil intellisense remove`.
+    """
     try:
-        os.remove(_XLL_INSTALL_PATH)
-    except FileNotFoundError:
-        ...
+        excel_version = _find_excel_version()
+    except OSError:
+        excel_version = None
+    if excel_version is not None:
+        try:
+            _remove_addin(excel_version, _XLL_INSTALL_PATH)   # Ensure no xlOil addins are in the registry
+        except OSError:
+            pass
+    for path in (_XLL_INSTALL_PATH, _XL_START_PATH / XLAM_NAME):
+        try:
+            os.remove(path)
+            print("Removed ", path)
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            raise SystemExit(f"Can't remove {path}: Excel is probably running. Close every Excel window "
+                             "(check Task Manager for EXCEL.EXE) and try again.")
+    from .intellisense import default_xll_name
+    if (_XL_START_PATH / default_xll_name()).exists():
+        print(f"The IntelliSense add-in stays in {_XL_START_PATH}: `xloil intellisense remove` removes it")
+
 
 def _clean_xloil():
-
+    """ Removes xlOil from Excel, deletes its settings file and logs, then uninstalls the package (pip). """
     _remove_xloil()
-
-    ini_path = Path(APP_DATA_DIR) / INIFILE_NAME
-    try:
-        os.remove(os.path.join(APP_DATA_DIR, INIFILE_NAME))
-        os.remove(os.path.join(APP_DATA_DIR, "xlOil.log"))
-    except FileNotFoundError:
-        ...
+    app_dir = Path(APP_DATA_DIR)
+    for path in [app_dir / INIFILE_NAME] + sorted(app_dir.glob("xlOil*.log")):
+        try:
+            path.unlink()
+            print("Removed ", path)
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            print(f"Can't remove {path}: close Excel and delete it by hand")
     import subprocess
     import sys
 
-    subprocess.Popen(f"{sys.executable} -m pip uninstall --yes xloil", shell=True)
+    # Wait for pip, so its output comes before the prompt returns
+    subprocess.run([sys.executable, "-m", "pip", "uninstall", "--yes", "xloil"])
 
 
 def _create_addin(filename):
@@ -823,7 +844,7 @@ def setup(features: str = None, yes: bool = False, no_pip: bool = False, intelli
                       for pkg in f.pip.split()})
     if missing and not no_pip:
         print(f"Installing: {' '.join(missing)}")
-        result = subprocess.run([sys.executable, "-m", "pip", "install", *missing])
+        result = subprocess.run([sys.executable, "-m", "pip", "install", "--no-warn-script-location", *missing])
         if result.returncode != 0:
             print("WARNING: pip install failed; those features will not work until the "
                   "packages are installed")

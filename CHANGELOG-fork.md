@@ -4,6 +4,20 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post13
+
+From a clean-install check on a laptop (python.org venv and a conda env, each with its own settings folder):
+
+- Fixed: `xloil remove` / `uninstall` deleted only the add-in and left the `xlOil.xlam` ribbon in XLSTART; its
+  macros call xlOil, so Excel showed ribbon errors at every start afterwards. Both go now; a file Excel holds
+  gives "close Excel" instead of a traceback; the IntelliSense add-in stays and is named.
+- Fixed: `xloil clean` started `pip uninstall` without waiting (its output came after the prompt returned)
+  and skipped the logs when there was no settings file; it now deletes the settings and every `xlOil*.log`
+  and waits for pip.
+- Quieter install: pip's "... is installed in ... which is not on PATH" warnings are off in the installer and
+  in `xloil setup` (xlOil runs as `python -m xloil...`, so PATH does not matter; the warnings alarmed people).
+- Docs: *Upgrading and removing* on the Installing page.
+
 ## 0.22.1.post12
 
 - Fixed (C++, event sink): an event that returned early (a wrong argument count, an ignored VBA error) skipped
