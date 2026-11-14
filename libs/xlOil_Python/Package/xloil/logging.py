@@ -41,3 +41,17 @@ def log_except(msg, level='error'):
        Logs '{msg}: {stack trace}' with a default level of 'error'
     """
     log.error(f"{msg}: {traceback.format_exc()}")
+
+def saved_level_index(saved, current, levels) -> int:
+    """ Which entry of `levels` the ribbon's Log Level box shows: the level saved in the settings file
+        (Addin.LogLevel) when it names one, else the running logger's level. The running logger often
+        stays at spdlog's default (info) while the file sink uses the saved level, so showing the
+        logger made the box disagree with the setting. 'warn' is accepted for 'warning'. """
+    names = [str(l).lower() for l in levels]
+    aliases = {'warn': 'warning', 'err': 'error', 'crit': 'critical'}
+    for value in (saved, current):
+        name = str(value or '').strip().strip('"\'').lower()
+        name = aliases.get(name, name)
+        if name in names:
+            return names.index(name)
+    return names.index('warning') if 'warning' in names else 0

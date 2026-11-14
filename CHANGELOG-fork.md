@@ -4,6 +4,11 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## Unreleased
+
+- Fixed: the ribbon's Log Level box showed the running logger's level (often *info*) instead of the `LogLevel`
+  saved in the settings file (for example *warning*). It now shows the saved setting.
+
 ## 0.22.1.post20
 
 - Every xlOil binary (`xlOil.dll`, `xlOil.xll`, the `xlOil_*.dll` / `.pyd` plugins) now carries Windows version

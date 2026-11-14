@@ -120,7 +120,13 @@ def get_log_level(ctrl, i):
     return xloil.log.levels[i]
 
 def get_log_level_selected(ctrl):
-    return xloil.log.levels.index(xloil.log.level)
+    # The saved setting, not the running logger (which can stay at info while the log file uses the setting)
+    from xloil.logging import saved_level_index
+    try:
+        saved = _settings['Addin']['LogLevel']
+    except KeyError:
+        saved = None
+    return saved_level_index(saved, xloil.log.level, xloil.log.levels)
 
 #
 # Date Format Callbacks
