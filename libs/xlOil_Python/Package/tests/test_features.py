@@ -1288,3 +1288,17 @@ def test_version_resource_matches_version_header():
     text = rc.read_text()
     assert f"#define XLO_VERSION_NUM {','.join(parts)},0" in text
     assert f'#define XLO_VERSION_STR "{".".join(parts)}"' in text
+
+
+def test_ribbon_log_level_shows_saved_setting():
+    """ The ribbon's Log Level box showed the running logger's level (spdlog's default, info) while
+        the settings file said warning; it now shows the saved setting """
+    from xloil.logging import saved_level_index
+    levels = ["trace", "debug", "info", "warning", "error", "critical", "off"]
+    assert saved_level_index("warning", "info", levels) == 3
+    assert saved_level_index("warn", "info", levels) == 3
+    assert saved_level_index("'error'", "info", levels) == 4
+    assert saved_level_index(None, "debug", levels) == 1
+    assert saved_level_index("nonsense", "nonsense", levels) == 3
+    src = (Path(xlo.__file__).parent / "ribbon_core.py").read_text(encoding="utf-8")
+    assert "saved_level_index(saved, xloil.log.level, xloil.log.levels)" in src
