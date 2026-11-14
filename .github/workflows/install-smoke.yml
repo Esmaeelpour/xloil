@@ -23,7 +23,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: docs/source/xlOil_Python/Installing.rst
+          sparse-checkout: |
+            docs/source/xlOil_Python/Installing.rst
+            tools/excel_smoke.py
           sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
@@ -84,3 +86,10 @@ jobs:
           }
           check (-not ($log | Select-String 'Traceback|NativeCommandError|ParserError')) "no tracebacks or PowerShell errors"
           if ($fail) { exit 1 }
+      - name: Open Excel and check Python answers formulas (the installed add-in)
+        if: matrix.excel
+        shell: powershell
+        timeout-minutes: 10
+        run: |
+          & "$env:RUNNER_TEMP\venv\Scripts\python.exe" tools/excel_smoke.py
+          exit $LASTEXITCODE
