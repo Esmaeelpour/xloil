@@ -1,0 +1,84 @@
+name: Install smoke test
+
+# Runs the documented one-line installer, exactly as the Installing page gives it, on clean Windows machines against
+# the published release: the check that installing works on a computer that is not the developer's.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  one-liner:
+    name: One-liner (py${{ matrix.python }}${{ matrix.excel && ', with Excel' || '' }})
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
+        excel: [false]
+        include:
+          - python: '3.12'
+            excel: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: docs/source/xlOil_Python/Installing.rst
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install Excel (so doctor checks it too)
+        if: matrix.excel
+        shell: pwsh
+        timeout-minutes: 60
+        run: |
+          $params = "'/exclude:Access Groove Lync OneDrive OneNote Outlook PowerPoint Publisher Teams Word /updates:FALSE'"
+          for ($i = 1; $i -le 3; $i++) {
+            choco install office365business --no-progress -y --params $params
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "Office install attempt $i failed with $LASTEXITCODE, retrying in 60s"
+            choco uninstall office365business -y --skip-autouninstaller 2>$null
+            Start-Sleep -Seconds 60
+          }
+          exit 1
+      - name: Run the documented one-liner in an activated venv (Enter for every question)
+        shell: powershell
+        run: |
+          # The command, taken from the docs rather than retyped here, so the docs are what gets tested
+          $line = Select-String -Path docs/source/xlOil_Python/Installing.rst -Pattern '^\s+powershell .*install\.ps1' |
+                  Select-Object -First 1
+          if (-not $line) { throw "one-liner not found in Installing.rst" }
+          $cmd = $line.Line.Trim()
+          Write-Host "Documented command: $cmd"
+          python -m venv "$env:RUNNER_TEMP\venv"
+          . "$env:RUNNER_TEMP\venv\Scripts\Activate.ps1"
+          Set-Content "$env:RUNNER_TEMP\oneliner.cmd" -Value $cmd -Encoding ascii   # runs the line exactly as written
+          $out = "" | cmd /c "$env:RUNNER_TEMP\oneliner.cmd" 2>&1 | ForEach-Object { "$_" }
+          $code = $LASTEXITCODE
+          $out | ForEach-Object { Write-Host $_ }
+          $out | Set-Content "$env:RUNNER_TEMP\install.log"
+          Write-Host "one-liner exit code: $code"
+      - name: Check the install
+        shell: powershell
+        run: |
+          $log = Get-Content "$env:RUNNER_TEMP\install.log"
+          $venv = "$env:RUNNER_TEMP\venv"
+          $fail = 0
+          function check($ok, $what) { if ($ok) { Write-Host "OK   $what" } else { Write-Host "FAIL $what"; $script:fail++ } }
+          $used = ($log | Select-String '^Using Python: (.*?) \(cp').Matches | ForEach-Object { $_.Groups[1].Value } | Select-Object -First 1
+          check ($used -like "$venv*") "installer used the activated venv ($used)"
+          $ver = & "$venv\Scripts\python.exe" -c "import importlib.metadata as m; print(m.version('xloil'))"
+          check ($ver -match '^0\.22\.1\.post\d+$') "xloil $ver installed in the venv"
+          check (Test-Path "$env:APPDATA\Microsoft\Excel\XLSTART\xlOil.xll") "add-in in XLSTART"
+          check (Test-Path "$env:APPDATA\xlOil\xlOil.ini") "settings file written"
+          $fails = @($log | Select-String '\[FAIL\]' | ForEach-Object { $_.Line.Trim() })
+          if ('${{ matrix.excel }}' -eq 'true') {
+            check ($fails.Count -eq 0) "doctor: no problems ($($fails -join '; '))"
+          } else {
+            # No Excel on this runner: that must be doctor's only complaint
+            $other = @($fails | Where-Object { $_ -notmatch 'Excel not found' })
+            check ($other.Count -eq 0) "doctor: nothing wrong apart from the missing Excel ($($other -join '; '))"
+          }
+          check (-not ($log | Select-String 'Traceback|NativeCommandError|ParserError')) "no tracebacks or PowerShell errors"
+          if ($fail) { exit 1 }
