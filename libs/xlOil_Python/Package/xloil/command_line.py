@@ -549,6 +549,14 @@ def config_set(key: str, value: str, ini: str = None):
     path, doc = _load_ini(ini)
     parts = _split_key(key)
     parsed = _parse_value(value)
+    if parts[-1] in _LIST_SETTINGS and not isinstance(parsed, list):
+        # Windows PowerShell 5.1 strips the inner double quotes it passes to a program: '["a", "b"]' arrives as [a, b]
+        text = value.strip()
+        if text.startswith("[") and text.endswith("]"):
+            names = [n.strip().strip("'\"") for n in text[1:-1].split(",")]
+            if all(n and all(part.isidentifier() for part in n.split(".")) for n in names) \
+                    or text[1:-1].strip() == "":
+                parsed = [n for n in names if n]
     if parts[-1] in _LIST_SETTINGS and not (
             isinstance(parsed, list) and all(isinstance(x, str) for x in parsed)):
         raise ValueError(f"{parts[-1]} must be a list of names in square brackets, e.g. "
@@ -675,6 +683,15 @@ def _ribbon_choice(ini=None):
     if _RIBBON_MODULES["com"] in mods:
         return "com"
     return "off" if mods else None
+
+
+def _feature_defaults(ini=None) -> set:
+    """ The features setup offers as the default: those the settings file already turns on (an upgrade keeps them:
+        0.22.1.post14 replaced a Qt choice with pandas and charts), else pandas and charts """
+    from .features import FEATURES, feature_enabled
+    mods = _load_modules(ini) if _ini_path(ini).exists() else []
+    enabled = {f.key for f in FEATURES if feature_enabled(f, mods)}
+    return enabled or {"pandas", "charts"}
 
 
 def _ribbon_kind(policy_requires_signed: bool, previous) -> str:
@@ -851,7 +868,7 @@ def setup(features: str = None, yes: bool = False, no_pip: bool = False, intelli
     if features is not None:
         chosen = [find_feature(k.strip()) for k in features.split(",") if k.strip()]
     else:
-        defaults = {"pandas", "charts"}
+        defaults = _feature_defaults()
         chosen = []
         print("Choose features (Enter accepts the default):")
         for f in FEATURES:
