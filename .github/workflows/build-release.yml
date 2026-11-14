@@ -199,7 +199,7 @@ jobs:
         shell: pwsh
         run: |
           $bin = if ('${{ steps.native.outputs.reuse }}' -eq 'true') { 'build\reuse\x64' } else { 'build\x64\Release' }
-          $files = Get-ChildItem $bin -File | Where-Object { $_.Extension -in '.dll', '.xll', '.pyd' -and $_.Name -notlike 'UnitTests*' }
+          $files = Get-ChildItem $bin -File | Where-Object { $_.Extension -in '.dll', '.xll', '.pyd' -and $_.Name -like 'xlOil*' }   # not Microsoft's XLCALL32.DLL
           $bad = 0
           foreach ($f in $files) {
             $v = $f.VersionInfo
