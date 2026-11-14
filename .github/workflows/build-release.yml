@@ -193,6 +193,22 @@ jobs:
           & $vstest $dll.FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      # Every shipped binary carries Windows version information (src/xlOilVersion.rc): binaries without it look
+      # more suspicious to anti-virus heuristics
+      - name: Check the binaries have version information
+        shell: pwsh
+        run: |
+          $bin = if ('${{ steps.native.outputs.reuse }}' -eq 'true') { 'build\reuse\x64' } else { 'build\x64\Release' }
+          $files = Get-ChildItem $bin -File | Where-Object { $_.Extension -in '.dll', '.xll', '.pyd' -and $_.Name -notlike 'UnitTests*' }
+          $bad = 0
+          foreach ($f in $files) {
+            $v = $f.VersionInfo
+            Write-Host ("{0,-28} {1,-8} {2,-10} {3}" -f $f.Name, $v.ProductName, $v.FileVersion, $v.OriginalFilename)
+            if ($v.ProductName -ne 'xlOil' -or $v.OriginalFilename -ne $f.Name) { $bad++ }
+          }
+          if (-not $files) { Write-Error "no binaries found in $bin"; exit 1 }
+          if ($bad) { Write-Error "$bad binaries lack correct version information"; exit 1 }
+
       - uses: actions/setup-python@v5
         id: py39
         with: { python-version: '3.9' }
