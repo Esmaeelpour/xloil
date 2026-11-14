@@ -45,6 +45,7 @@ jobs:
       - name: Run the documented one-liner in an activated venv (Enter for every question)
         shell: powershell
         run: |
+          $ErrorActionPreference = "Continue"   # a line on stderr must not stop the step: the full output is checked
           # The command, taken from the docs rather than retyped here, so the docs are what gets tested
           $line = Select-String -Path docs/source/xlOil_Python/Installing.rst -Pattern '^\s+powershell .*install\.ps1' |
                   Select-Object -First 1
