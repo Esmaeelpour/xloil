@@ -4,6 +4,17 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post19
+
+Found by the new install smoke test (`.github/workflows/install-smoke.yml`), which runs the documented one-liner,
+read from the Installing page, on clean GitHub Windows machines for every Python version, one with Excel installed:
+
+- Fixed: on a computer without Excel the installer pip-installed pandas and matplotlib, then crashed with a
+  `FileNotFoundError` traceback. Setup now checks for Excel first and says what to do; `xloil install` gives the
+  same message instead of a traceback.
+
+The smoke test runs on every published release and can be started by hand (Actions > Install smoke test).
+
 ## 0.22.1.post18
 
 - Fixed: in a conda-initialised PowerShell the one-liner installed into conda base even with another conda env

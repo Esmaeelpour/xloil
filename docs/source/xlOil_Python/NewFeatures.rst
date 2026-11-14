@@ -131,7 +131,7 @@ Install the wheel for your Python version from the GitHub release, then:
 
 .. code-block:: bat
 
-    pip install xloil-0.22.1.post18-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post19-cp312-cp312-win_amd64.whl
     xloil install --load-modules xloil.xloil_ribbon,xloil.plotting,mymodule
 
 A module using several of the new features:

@@ -979,6 +979,7 @@ def test_setup_keeps_user_modules(ini_copy, monkeypatch, capsys):
     monkeypatch.setattr(cl, "addins_must_be_signed", lambda version=None: True)
     monkeypatch.setattr(cl, "ribbon", lambda kind, ini=None: captured.setdefault("ribbon", kind))
     monkeypatch.setattr(cl, "_check_bitness", lambda: True)
+    monkeypatch.setattr(cl, "_excel_installed", lambda: True)
     monkeypatch.setattr(cl, "doctor", lambda: 0)
     cl.setup(features="charts", yes=True, no_pip=True, intellisense=False)
     mods = captured["mods"].split(",")
@@ -1136,6 +1137,7 @@ def test_setup_keeps_the_chosen_ribbon(ini_copy, monkeypatch):
     monkeypatch.setattr(cl, "addins_must_be_signed", lambda version=None: False)
     monkeypatch.setattr(cl, "ribbon", lambda kind, ini=None: captured.setdefault("ribbon", kind))
     monkeypatch.setattr(cl, "_check_bitness", lambda: True)
+    monkeypatch.setattr(cl, "_excel_installed", lambda: True)
     monkeypatch.setattr(cl, "doctor", lambda: 0)
     cl.setup(features="pandas", yes=True, no_pip=True, intellisense=False)
     assert captured["ribbon"] == "xlam" and "xloil.xlam_ribbon" in captured["mods"].split(",")
@@ -1161,6 +1163,7 @@ def test_setup_keeps_the_chosen_features(ini_copy, monkeypatch):
     monkeypatch.setattr(cl, "addins_must_be_signed", lambda version=None: False)
     monkeypatch.setattr(cl, "ribbon", lambda kind, ini=None: None)
     monkeypatch.setattr(cl, "_check_bitness", lambda: True)
+    monkeypatch.setattr(cl, "_excel_installed", lambda: True)
     monkeypatch.setattr(cl, "doctor", lambda: 0)
     import xloil.features as feats
     monkeypatch.setattr(feats, "feature_available", lambda f: True)
@@ -1221,3 +1224,26 @@ def test_xloattr_calls_builtin_methods():
     assert ef._xlo_attr_helper(dt.date(2026, 1, 2), "year") == 2026
     import collections
     assert ef._xlo_attr_helper(collections, "OrderedDict") is collections.OrderedDict
+
+
+def test_setup_without_excel_says_so_before_installing(monkeypatch, capsys):
+    """On a computer without Excel, setup pip-installed pandas and matplotlib, then install_xloil crashed with a
+    FileNotFoundError traceback (found by the install smoke test on a clean Windows runner). Now it stops first, with
+    a message; `xloil install` on its own gives the same message instead of a traceback"""
+    import subprocess
+    import xloil.command_line as cl
+    monkeypatch.setattr(cl, "_check_bitness", lambda: True)
+    monkeypatch.setattr(cl, "excel_path", lambda: None)
+    def no_excel():
+        raise FileNotFoundError(2, "The system cannot find the file specified")
+    monkeypatch.setattr(cl, "_find_excel_version", no_excel)
+    ran = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **k: ran.append(cmd))
+    assert cl._excel_installed() is False
+    assert cl.setup(features="pandas", yes=True, intellisense=False) == 1
+    assert "Excel was not found" in capsys.readouterr().out
+    assert ran == []                                    # nothing pip-installed
+    with pytest.raises(SystemExit, match="Excel was not found"):
+        cl.install_xloil()
+    monkeypatch.setattr(cl, "_find_excel_version", lambda: 16)
+    assert cl._excel_installed() is True

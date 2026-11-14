@@ -71,15 +71,16 @@ jobs:
           check ($used -like "$venv*") "installer used the activated venv ($used)"
           $ver = & "$venv\Scripts\python.exe" -c "import importlib.metadata as m; print(m.version('xloil'))"
           check ($ver -match '^0\.22\.1\.post\d+$') "xloil $ver installed in the venv"
-          check (Test-Path "$env:APPDATA\Microsoft\Excel\XLSTART\xlOil.xll") "add-in in XLSTART"
-          check (Test-Path "$env:APPDATA\xlOil\xlOil.ini") "settings file written"
-          $fails = @($log | Select-String '\[FAIL\]' | ForEach-Object { $_.Line.Trim() })
           if ('${{ matrix.excel }}' -eq 'true') {
+            check (Test-Path "$env:APPDATA\Microsoft\Excel\XLSTART\xlOil.xll") "add-in in XLSTART"
+            check (Test-Path "$env:APPDATA\xlOil\xlOil.ini") "settings file written"
+            $fails = @($log | Select-String '\[FAIL\]' | ForEach-Object { $_.Line.Trim() })
             check ($fails.Count -eq 0) "doctor: no problems ($($fails -join '; '))"
+            check ($log | Select-String 'No problems found') "doctor ran and found no problems"
           } else {
-            # No Excel on this runner: that must be doctor's only complaint
-            $other = @($fails | Where-Object { $_ -notmatch 'Excel not found' })
-            check ($other.Count -eq 0) "doctor: nothing wrong apart from the missing Excel ($($other -join '; '))"
+            # No Excel on this runner: setup must say so, before pip-installing any features
+            check ($log | Select-String 'Excel was not found on this computer') "setup says Excel was not found"
+            check (-not ($log | Select-String '^Installing: ')) "no feature libraries installed for nothing"
           }
           check (-not ($log | Select-String 'Traceback|NativeCommandError|ParserError')) "no tracebacks or PowerShell errors"
           if ($fail) { exit 1 }
