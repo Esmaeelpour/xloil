@@ -303,6 +303,11 @@ class _WorksheetFunc:
         self._xloil_spec = spec
         self.__doc__     = spec.help
         self.__name__    = spec.name
+        # Keep the original's module: code that copies __module__ from a decorated function (e.g. to queue another
+        # function on the same workbook module) otherwise got this class's module, xloil.register, which is never
+        # scanned, so that function was never registered
+        self.__module__   = getattr(func, '__module__', __name__)
+        self.__qualname__ = getattr(func, '__qualname__', spec.name)
     def __call__(self, *args, **kwargs):
         return self.__wrapped__(*args, **kwargs)
 

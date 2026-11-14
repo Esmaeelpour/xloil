@@ -1,6 +1,13 @@
 
 from ._core import *
 
+if XLOIL_EMBEDDED:
+    # Inside Excel, the cryptography package (imported by xlwings, requests, ...) stops with RuntimeError "OpenSSL 3.0's
+    # legacy provider failed to load": Excel's process has its own OpenSSL. Without the legacy provider it loads; only
+    # legacy algorithms (e.g. old PKCS#12 files) are unavailable. Set it to 0 in xlOil.ini's Environment to keep them.
+    import os as _os
+    _os.environ.setdefault("CRYPTOGRAPHY_OPENSSL_NO_LEGACY", "1")
+
 from .logging import *
 
 from .register import (

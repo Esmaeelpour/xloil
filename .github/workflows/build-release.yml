@@ -35,7 +35,7 @@ concurrency:
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
-  PACKAGE_VERSION: 0.22.1.post9
+  PACKAGE_VERSION: 0.22.1.post10
 
 permissions:
   contents: read

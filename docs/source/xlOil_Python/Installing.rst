@@ -52,7 +52,7 @@ command prompt *in the Python environment you want Excel to use*:
 
 .. code-block:: bat
 
-    pip install xloil-0.22.1.post9-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post10-cp312-cp312-win_amd64.whl
     xloil setup
 
 ``xloil setup`` is the guided set-up. ``--features pandas,polars,charts,qt,intellisense,cache``
@@ -122,7 +122,7 @@ Optional extras install the libraries for particular features:
 
 .. code-block:: bat
 
-    pip install "xloil-0.22.1.post9-cp312-cp312-win_amd64.whl[all]"      :: everything below
+    pip install "xloil-0.22.1.post10-cp312-cp312-win_amd64.whl[all]"      :: everything below
     pip install "xloil-...whl[pandas]"      :: DataFrames
     pip install "xloil-...whl[polars]"      :: polars
     pip install "xloil-...whl[plotting]"    :: matplotlib, plotly, Qt WebEngine charts
@@ -139,7 +139,7 @@ environment*:
 
     conda create -n xl python=3.12 pandas
     conda activate xl
-    pip install xloil-0.22.1.post9-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post10-cp312-cp312-win_amd64.whl
     xloil install
 
 Unlike python.org installs, an embedded conda interpreter cannot find its
@@ -225,7 +225,14 @@ No xlOil tab, nothing in the log                       Excel blocked the add-in:
 "failed to get the Python codec of the                 Conda without PYTHONHOME: run
 filesystem encoding" in ``xlOil.log``                  ``xloil config python <env>\python.exe``
 ``#NAME?`` for your functions                          Module not loaded: check ``LoadModules`` and the
-                                                       log at ``%APPDATA%\xlOil\xlOil.log``
+                                                       log at ``%APPDATA%\xlOil\xlOil.log``. A workbook
+                                                       module's ``#NAME?`` cells are re-entered once it
+                                                       has loaded; else ribbon: Fix #NAME? errors
+"OpenSSL 3.0's legacy provider failed to load"         Set by default from 0.22.1.post10
+(importing xlwings or requests in Excel)               (``CRYPTOGRAPHY_OPENSSL_NO_LEGACY=1``); on older
+                                                       versions add it to ``xlOil.ini``'s Environment
+``'_LogWriter' object has no attribute 'warning'``     Use ``xloil.log.warn`` (``warning`` works from
+                                                       0.22.1.post10)
 "DLL load failed ... QtWidgets" in a Python prompt     Conda ICU vs pip Qt clash (handled inside Excel);
                                                        see *Qt in conda* above
 Interactive charts show as pictures                    No Qt WebEngine: ``pip install PySide6`` and load

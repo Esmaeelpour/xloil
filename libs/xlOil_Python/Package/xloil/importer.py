@@ -111,14 +111,22 @@ class ImportHelper(metaclass=Singleton):
         addin.event_loop.call_soon_threadsafe(self.reload, module)
 
 
-def linked_workbook() -> str:
+def linked_workbook(module=None) -> str:
     """
-        Returns the full path of the workbook linked to the calling module
-        or None if the module was not loaded with an associated workbook.
+        Returns the workbook linked to a workbook module, or None if there is none.
+
+        module: the module (or its file path) to ask about. When omitted, the calling module, else the nearest module
+        up the call stack that has a linked workbook, so a helper in a shared package, called while a workbook module
+        loads, finds that workbook (it used to answer for the immediate caller only, and returned None there).
     """
-    # Get immediate caller
-    frame = inspect.stack()[1]
-    return _linked_workbooks.get(frame.filename, None)
+    if module is not None:
+        path = module if isinstance(module, str) else getattr(module, '__file__', None)
+        return _linked_workbooks.get(path, None) if path else None
+    for frame in inspect.stack()[1:]:
+        found = _linked_workbooks.get(frame.filename, None)
+        if found is not None:
+            return found
+    return None
 
 
 def source_addin() -> Addin:
@@ -339,6 +347,28 @@ def _import_and_scan(module_names, addin):
     return results
 
 
+def _fix_name_errors_later(workbook_name, wait=1000):
+    """
+        A workbook module is loaded after Excel's first calculation of its workbook, and Excel does not recalculate a
+        #NAME? cell when the function appears later (not even Ctrl+Alt+F9). Once the module's functions are registered,
+        re-enter the workbook's #NAME? formulas (xloil.fix_name_errors), so they work without a manual step.
+    """
+    import xloil_core
+
+    def run():
+        try:
+            from .com import fix_name_errors
+            from ._core import workbooks
+            wb = workbooks[os.path.basename(workbook_name)]
+            fix_name_errors(wb)
+        except Exception as e:
+            log.warn("Could not refresh #NAME? cells in %s: %s (use the ribbon's Fix #NAME? errors)", workbook_name, e)
+    try:
+        xloil_core.excel_callback(run, wait=wait)
+    except Exception:
+        pass
+
+
 def _import_file_and_scan(path, addin=None, workbook_name:str=None):
     """
         Internal use only: called from xlOil Core. Wraps _import_file
@@ -357,6 +387,8 @@ def _import_file_and_scan(path, addin=None, workbook_name:str=None):
             # Calling import_module will bypass our import hook, so scan_module explicitly
             n_funcs = scan_module(module, addin)
             status.msg(f"Registered {n_funcs} funcs for {path}")
+            if workbook_name is not None and n_funcs:
+                _fix_name_errors_later(workbook_name)
 
         except Exception as e:
             status.msg(f"Error loading {path}, see log")
