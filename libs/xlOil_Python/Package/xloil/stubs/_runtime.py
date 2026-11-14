@@ -221,7 +221,9 @@ class LogWriter:
     def debug(self, msg, *args): self._logger.debug(str(msg), *args)
     def info(self, msg, *args): self._logger.info(str(msg), *args)
     def warn(self, msg, *args): self._logger.warning(str(msg), *args)
+    def warning(self, msg, *args): self._logger.warning(str(msg), *args)
     def error(self, msg, *args): self._logger.error(str(msg), *args)
+    def critical(self, msg, *args): self._logger.critical(str(msg), *args)
     def flush(self): pass
 
     level = 'info'

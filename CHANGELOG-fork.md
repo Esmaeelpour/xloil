@@ -4,6 +4,30 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post10
+
+Lessons from a large workbook module (a bridge design workbook) run in real Excel:
+
+- Workbook modules: after the module registers its functions, xlOil re-enters the workbook's `#NAME?` formulas that
+  were calculated before the module loaded (a full recalculation, Ctrl+Alt+F9, does not clear them). No more manual
+  "Fix #NAME? errors".
+- `xloil.linked_workbook(module=None)`: name a module (or its file), or let it search up the call stack, so a helper
+  in a shared package, called while a workbook module loads, finds the workbook (it answered only its immediate
+  caller and returned None there).
+- `xloil.log.warning()` and `xloil.log.critical()` work as in Python's `logging` (only `warn` / `error` existed:
+  code written with logging habits raised AttributeError inside Excel, usually in an error path).
+- A function decorated with `xloil.func` keeps its own `__module__` and `__qualname__` (it reported
+  `xloil.register`: code that copied `__module__` from it to register another function queued that function where
+  xlOil never looks, e.g. a right-click command that then said "Cannot run the macro").
+- Inside Excel, `CRYPTOGRAPHY_OPENSSL_NO_LEGACY=1` is set by default: the `cryptography` package (imported by
+  xlwings, requests, ...) otherwise stops with "OpenSSL 3.0's legacy provider failed to load" in Excel's process, and
+  so does any workbook module that imports it. Set it to 0 in `xlOil.ini`'s Environment to keep legacy algorithms.
+- `xloil.testing.excel_array(rows)`: rows as Excel hands a range to an `xlo.Array` argument (a 2-d numpy array);
+  `xloil.testing.call` passes arguments unconverted, so tests with lists missed array-only failures.
+- Docs: on some Excel 365 setups the `SheetBeforeDoubleClick`, `SheetBeforeRightClick` and `SheetSelectionChange`
+  events do not reach Python (seen with post9: handlers registered, never called; `SheetChange` and `SheetActivate`
+  work). A button made with a data-validation drop-down and `SheetChange` works everywhere (Events page).
+
 ## 0.22.1.post9
 
 - Fixed: `xloil doctor` (and so the end of `xloil setup`) wrongly reported "Office

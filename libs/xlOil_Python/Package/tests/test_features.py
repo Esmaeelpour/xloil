@@ -994,3 +994,78 @@ def test_load_modules_ignores_comments(ini_copy):
     assert "xloil.xloil_ribbon" in ini_copy.read_text(encoding="utf-8").split("LoadModules=")[0]
     cl.config_set("xlOil_Python.LoadModules", '["xloil.xlam_ribbon", "mytools"]', ini=str(ini_copy))
     assert cl._load_modules(str(ini_copy)) == ["xloil.xlam_ribbon", "mytools"]
+
+
+# ---- lessons from a workbook module in real Excel (VDOT bridge workbook, 2026-11-13) ----------------------------------
+
+def test_log_has_logging_names():
+    """log.warning / log.critical work, as in Python's logging (the core writer had only warn: AttributeError in Excel)"""
+    from xloil.logging import _add_logging_names
+    xlo.log.warning("a warning %s", 1)
+    xlo.log.critical("a critical %s", 2)
+
+    class Core:                                     # like the compiled writer: warn and error only
+        def __init__(self):
+            self.got = []
+        def warn(self, msg, *args):
+            self.got.append(("warn", msg % args))
+        def error(self, msg, *args):
+            self.got.append(("error", msg % args))
+    _add_logging_names(Core)
+    w = Core()
+    w.warning("w %s", 1)
+    w.critical("c %s", 2)
+    assert w.got == [("warn", "w 1"), ("error", "c 2")]
+
+
+def test_decorated_function_keeps_its_module():
+    """Copying __module__ from a decorated function gives the function's own module (was xloil.register, never scanned)"""
+    @xlo.func
+    def keeps_module(x: float) -> float:
+        return x
+    assert keeps_module.__module__ == __name__
+    assert keeps_module.__qualname__.endswith("keeps_module")
+
+
+def test_linked_workbook_from_a_helper(tmp_path):
+    """A helper in another module, called while a workbook module runs, finds the workbook up the call stack; a module
+    can also be named"""
+    import types
+    from xloil import importer
+    wb_mod = tmp_path / "Book1.py"
+    wb_mod.write_text("import helper_lw\nFOUND = helper_lw.which()\n")
+    (tmp_path / "helper_lw.py").write_text("import xloil\ndef which():\n    return xloil.linked_workbook()\n")
+    importer._linked_workbooks[str(wb_mod)] = "Book1.xlsx"
+    sys.path.insert(0, str(tmp_path))
+    try:
+        ns = {"__file__": str(wb_mod), "__name__": "wbmod_test"}
+        exec(compile(wb_mod.read_text(), str(wb_mod), "exec"), ns)
+        assert ns["FOUND"] == "Book1.xlsx"
+        assert xlo.linked_workbook(types.SimpleNamespace(__file__=str(wb_mod))) == "Book1.xlsx"
+        assert xlo.linked_workbook(str(wb_mod)) == "Book1.xlsx"
+        assert xlo.linked_workbook() is None          # this test module is not a workbook module
+    finally:
+        sys.path.remove(str(tmp_path))
+        importer._linked_workbooks.pop(str(wb_mod), None)
+
+
+def test_name_errors_fixed_after_workbook_module_loads(monkeypatch):
+    """After a workbook module registers its functions, its workbook's #NAME? cells are re-entered (a full recalculation
+    does not clear them)"""
+    from xloil import importer, com, _core
+    queued, fixed = [], []
+    monkeypatch.setattr(xloil_core, "excel_callback", lambda fn, wait=0, **k: queued.append((fn, wait)), raising=False)
+    monkeypatch.setattr(com, "fix_name_errors", lambda wb: fixed.append(wb))
+    monkeypatch.setattr(_core, "workbooks", {"Bridge.xlsx": "the workbook"})
+    importer._fix_name_errors_later(r"C:\work\Bridge.xlsx")
+    assert len(queued) == 1 and queued[0][1] > 0
+    queued[0][0]()
+    assert fixed == ["the workbook"]
+
+
+def test_excel_array_like_excel():
+    """Rows as Excel hands them to an Array argument: code testing 'rows or []' fails on it, as in Excel"""
+    a = xt.excel_array([["key", 1.5, None], ["k2", "x", 3]])
+    assert a.shape == (2, 3) and a.dtype == object
+    with pytest.raises(ValueError):
+        bool(a or [])

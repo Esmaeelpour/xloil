@@ -3,6 +3,21 @@ import warnings
 from ._core import _LogWriter
 
 log = _LogWriter()
+
+# Python's logging names: log.warning(...) and log.critical(...) work too. Code written with logging habits called
+# log.warning, which the core writer does not have: an AttributeError inside Excel only (often in an error path)
+def _add_logging_names(cls):
+    """Give a log writer class warning() and critical() (as warn() and error()) when it lacks them."""
+    for alias, target in (('warning', 'warn'), ('critical', 'error')):
+        if not hasattr(cls, alias):
+            try:
+                setattr(cls, alias, (lambda t: lambda self, msg, *args: getattr(self, t)(msg, *args))(target))
+            except (AttributeError, TypeError):
+                pass
+    return cls
+
+
+_add_logging_names(_LogWriter)
 """
     An instance of `xloil._LogWriter` which writes a log message to xlOil's log.  The level 
     parameter can be a integer constant from the ``logging`` module or one of the strings

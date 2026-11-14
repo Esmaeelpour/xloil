@@ -82,6 +82,16 @@ def call(fn, *args, **kwargs) -> Any:
     return result
 
 
+def excel_array(rows, dtype=object):
+    """
+        Rows as Excel hands a range to an ``xlo.Array`` argument: a 2-d numpy array (object dtype by default).
+        `call` passes arguments through unconverted, so a test that passes a list can miss code that only fails on an
+        array (e.g. ``rows or []``: "The truth value of an array ... is ambiguous").
+    """
+    import numpy as np
+    return np.array([list(r) for r in rows], dtype=dtype)
+
+
 def take(fn, n: int, *args, **kwargs) -> List[Any]:
     """ Returns the first `n` values yielded by a (possibly infinite) RTD generator function """
     target = unwrap(fn)
