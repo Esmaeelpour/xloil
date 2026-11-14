@@ -9,7 +9,7 @@ on:
 
 jobs:
   one-liner:
-    name: One-liner (py${{ matrix.python }}${{ matrix.excel && ', with Excel' || '' }})
+    name: One-liner (py${{ matrix.python }}${{ matrix.excel && ', with Excel' || '' }}${{ matrix.signed && ', signed add-ins policy' || '' }})
     runs-on: windows-latest
     timeout-minutes: 90
     strategy:
@@ -20,6 +20,10 @@ jobs:
         include:
           - python: '3.12'
             excel: true
+          # Locked-down Office: "Require application add-ins to be signed by Trusted Publisher" (blocks the COM ribbon)
+          - python: '3.12'
+            excel: true
+            signed: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,6 +48,14 @@ jobs:
             Start-Sleep -Seconds 60
           }
           exit 1
+      - name: Turn on the signed-add-ins Office policy
+        if: matrix.signed
+        shell: powershell
+        run: |
+          $key = "HKCU:\Software\Policies\Microsoft\Office\16.0\Excel\Security"
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name requireaddinsig -Value 1 -PropertyType DWord -Force | Out-Null
+          Write-Host "requireaddinsig = $((Get-ItemProperty $key).requireaddinsig)"
       - name: Run the documented one-liner in an activated venv (Enter for every question)
         shell: powershell
         run: |
@@ -79,6 +91,15 @@ jobs:
             $fails = @($log | Select-String '\[FAIL\]' | ForEach-Object { $_.Line.Trim() })
             check ($fails.Count -eq 0) "doctor: no problems ($($fails -join '; '))"
             check ($log | Select-String 'No problems found') "doctor ran and found no problems"
+            $mods = Get-Content "$env:APPDATA\xlOil\xlOil.ini" | Select-String '^\s*LoadModules'
+            if ('${{ matrix.signed }}' -eq 'true') {
+              check ($log | Select-String 'Ribbon: xlOil.xlam') "setup chose the xlam ribbon under the policy"
+              check (Test-Path "$env:APPDATA\Microsoft\Excel\XLSTART\xlOil.xlam") "xlOil.xlam in XLSTART"
+              check ("$mods" -match 'xloil.xlam_ribbon' -and "$mods" -notmatch 'xloil.xloil_ribbon') "LoadModules has the xlam ribbon only ($mods)"
+            } else {
+              check ("$mods" -match 'xloil.xloil_ribbon') "LoadModules has the COM ribbon ($mods)"
+              check (-not (Test-Path "$env:APPDATA\Microsoft\Excel\XLSTART\xlOil.xlam")) "no xlOil.xlam left in XLSTART"
+            }
           } else {
             # No Excel on this runner: setup must say so, before pip-installing any features
             check ($log | Select-String 'Excel was not found on this computer') "setup says Excel was not found"
