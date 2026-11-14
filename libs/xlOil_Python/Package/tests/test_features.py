@@ -1274,3 +1274,17 @@ def test_how_to_use_examples_run(tmp_path, monkeypatch):
     assert "command" in xt.spec(mod.FillDates).features
     for name in ("LineChart", "ClearFormats"):
         assert callable(getattr(mod, name))
+
+
+def test_version_resource_matches_version_header():
+    """The Windows version information compiled into every binary (src/xlOilVersion.rc) states the version in
+    include/xloil/Version.h"""
+    import re
+    root = Path(__file__).resolve().parents[4]
+    rc, header = root / "src/xlOilVersion.rc", root / "include/xloil/Version.h"
+    if not rc.exists():
+        pytest.skip("not in the source tree")
+    parts = [re.search(rf"XLOIL_{p}_VERSION\s+(\d+)", header.read_text()).group(1) for p in ("MAJOR", "MINOR", "PATCH")]
+    text = rc.read_text()
+    assert f"#define XLO_VERSION_NUM {','.join(parts)},0" in text
+    assert f'#define XLO_VERSION_STR "{".".join(parts)}"' in text

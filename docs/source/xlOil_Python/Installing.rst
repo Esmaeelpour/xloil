@@ -52,7 +52,7 @@ command prompt *in the Python environment you want Excel to use*:
 
 .. code-block:: bat
 
-    pip install xloil-0.22.1.post19-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post20-cp312-cp312-win_amd64.whl
     xloil setup
 
 ``xloil setup`` is the guided set-up. ``--features pandas,polars,charts,qt,intellisense,cache``
@@ -122,7 +122,7 @@ Optional extras install the libraries for particular features:
 
 .. code-block:: bat
 
-    pip install "xloil-0.22.1.post19-cp312-cp312-win_amd64.whl[all]"      :: everything below
+    pip install "xloil-0.22.1.post20-cp312-cp312-win_amd64.whl[all]"      :: everything below
     pip install "xloil-...whl[pandas]"      :: DataFrames
     pip install "xloil-...whl[polars]"      :: polars
     pip install "xloil-...whl[plotting]"    :: matplotlib, plotly, Qt WebEngine charts
@@ -139,7 +139,7 @@ environment*:
 
     conda create -n xl python=3.12 pandas
     conda activate xl
-    pip install xloil-0.22.1.post19-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post20-cp312-cp312-win_amd64.whl
     xloil install
 
 Unlike python.org installs, an embedded conda interpreter cannot find its
@@ -262,7 +262,33 @@ Installer uses conda base, not the env you activated   Your profile re-activates
                                                        use the command above (``-NoProfile``) or pass
                                                        ``-Python <env>\python.exe`` to ``install.ps1``
 Functions using ``xloil.app()`` fail                   ``pip install pywin32``
+Defender: ``Trojan:Win32/Bearfoos.A!ml`` in            See *Anti-virus warnings* below
+``xlOil.dll``
 =====================================================  =================================================
+
+Anti-virus warnings
+~~~~~~~~~~~~~~~~~~~
+
+Windows Defender sometimes flags ``xlOil.dll`` as ``Trojan:Win32/Bearfoos.A!ml``.
+The ``!ml`` means the warning comes from Defender's machine-learning guess, not
+from a match with known malware. xlOil does things that guess looks for: it is
+a little-used, unsigned binary that loads into Excel and patches Excel's
+function entry points so it can call Python.
+
+Before you allow it:
+
+* Check where your copy came from. The wheels on the
+  `GitHub release <https://github.com/Esmaeelpour/xloil/releases>`_ are built by
+  GitHub Actions from this repository, and the release page shows each file's
+  SHA-256 checksum. Install only from there.
+* In *Windows Security > Virus & threat protection > Protection history*, open
+  the alert and choose *Allow on device* for that one detection. Don't exclude
+  whole folders.
+* Report the false positive at https://www.microsoft.com/wdsi/filesubmission
+  ("Incorrectly detected"), so the file is cleared for everyone.
+
+Until the file is restored, xlOil doesn't load and every function shows
+``#NAME?``.
 
 For more detail, set ``LogLevel="debug"`` with
 ``xloil config set Addin.LogLevel "'debug'"`` and restart Excel.

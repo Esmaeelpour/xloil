@@ -8,4 +8,13 @@
     <OutDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</OutDir>
 	<IntDir>$(xlOilRoot)build\obj\$(ProjectName)_$(Platform)_$(Configuration)\</IntDir>
   </PropertyGroup>
+  <!-- Windows version information in every DLL / XLL / PYD (see xlOilVersion.rc) -->
+  <ItemDefinitionGroup Condition="'$(ConfigurationType)'=='DynamicLibrary'">
+    <ResourceCompile>
+      <PreprocessorDefinitions>XLO_FILENAME=\"$(TargetName)$(TargetExt)\";XLO_PROJECT=\"$(ProjectName)\";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(ConfigurationType)'=='DynamicLibrary'">
+    <ResourceCompile Include="$(MSBuildThisFileDirectory)xlOilVersion.rc" />
+  </ItemGroup>
 </Project>
