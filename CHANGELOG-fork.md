@@ -4,6 +4,18 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post16
+
+From running the documented one-line installer in a real terminal (conda-initialised Windows PowerShell 5.1):
+
+- Fixed: the one-liner `powershell ... -c "irm <url> | iex"` failed there with a parse error ("The terminator
+  ... is missing from the multiline comment"), 3 runs of 3. The documented command is now
+  `powershell -ExecutionPolicy Bypass -c "iex (irm <url>)"`, which ran 3 of 3 (so did `irm | Out-String | iex`).
+  A Troubleshooting row names the old error. A test keeps the docs on the working form, and CI parses
+  `install.ps1` with Windows PowerShell 5.1.
+- Fixed: with a venv activated in a conda-initialised shell (conda base is always active there) the installer
+  installed into conda base. An activated venv now comes first, then the active conda env.
+
 ## 0.22.1.post15
 
 From upgrading the real install on a laptop (conda base, packages in the user site):

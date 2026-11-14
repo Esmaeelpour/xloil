@@ -1182,3 +1182,26 @@ def test_config_set_takes_a_list_powershell_stripped(ini_copy):
         cl.config_set("xlOil_Python.LoadModules", "xloil.pandas", ini=str(ini_copy))
     with pytest.raises(ValueError, match="square brackets"):
         cl.config_set("xlOil_Python.LoadModules", "[a b, c]", ini=str(ini_copy))
+
+
+def test_one_line_installer_uses_iex_of_irm():
+    """The documented one-liner is `iex (irm URL)`: `irm URL | iex` failed in a conda-initialised Windows PowerShell 5.1
+    ("The terminator '#>' is missing from the multiline comment"), 3 runs of 3; `iex (irm URL)` ran 3 of 3"""
+    root = Path(__file__).resolve().parents[4]
+    for rel in ("tools/install.ps1", "docs/source/xlOil_Python/Installing.rst"):
+        p = root / rel
+        if not p.exists():
+            pytest.skip("not in the source tree")
+        text = p.read_text(encoding="utf-8")
+        assert "iex (irm https://github.com/Esmaeelpour/xloil/releases/latest/download/install.ps1)" in text, rel
+        assert 'install.ps1 | iex"' not in text, rel
+
+
+def test_installer_help_block_closes_once():
+    """install.ps1's <# ... #> help block must not contain the closing marker itself (a quoted error message once
+    ended it early and broke the whole script)"""
+    p = Path(__file__).resolve().parents[4] / "tools" / "install.ps1"
+    if not p.exists():
+        pytest.skip("not in the source tree")
+    text = p.read_text(encoding="utf-8")
+    assert text.startswith("<#") and text.count("#>") == 1 and text.count("<#") == 1

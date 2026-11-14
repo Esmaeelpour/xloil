@@ -156,7 +156,7 @@ to Excel. This is enough to unit test add-in code in any CI system.
 
 .. code-block:: bash
 
-    pip install xloil_stubs-0.22.1.post15-py3-none-any.whl numpy pytest
+    pip install xloil_stubs-0.22.1.post16-py3-none-any.whl numpy pytest
     pytest
 
 ``xloil.testing``
