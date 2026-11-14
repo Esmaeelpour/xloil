@@ -664,6 +664,27 @@ def _user_modules(ini=None) -> list:
     return [m for m in _load_modules(ini) if m != "xloil" and not m.startswith("xloil.")]
 
 
+def _ribbon_choice(ini=None):
+    """ The ribbon an existing settings file uses: 'xlam', 'com', 'off' (LoadModules without a ribbon), or None when
+        there is no settings file yet (a first install) """
+    if not _ini_path(ini).exists():
+        return None
+    mods = _load_modules(ini)
+    if _RIBBON_MODULES["xlam"] in mods:
+        return "xlam"
+    if _RIBBON_MODULES["com"] in mods:
+        return "com"
+    return "off" if mods else None
+
+
+def _ribbon_kind(policy_requires_signed: bool, previous) -> str:
+    """ The ribbon setup installs: xlam where Office requires signed add-ins; else the one already chosen (an
+        upgrade keeps xlam or off: 0.22.1.post13 reset it to the COM ribbon); else the COM ribbon """
+    if policy_requires_signed:
+        return "xlam"
+    return previous if previous in ("xlam", "off") else "com"
+
+
 def _xlam_source() -> Path:
     """ The xlOil.xlam shipped in this package. (Not imported from xloil.xlam_ribbon:
         that module, like the ribbon logic it uses, only loads inside Excel.) """
@@ -844,17 +865,20 @@ def setup(features: str = None, yes: bool = False, no_pip: bool = False, intelli
                       for pkg in f.pip.split()})
     if missing and not no_pip:
         print(f"Installing: {' '.join(missing)}")
-        result = subprocess.run([sys.executable, "-m", "pip", "install", "--no-warn-script-location", *missing])
+        result = subprocess.run([sys.executable, "-m", "pip", "install", "--no-warn-script-location",
+                                 "--disable-pip-version-check", *missing])
         if result.returncode != 0:
             print("WARNING: pip install failed; those features will not work until the "
                   "packages are installed")
         print()
 
-    use_xlam = addins_must_be_signed()
-    if use_xlam:
-        print("Office policy here requires signed add-ins, which blocks xlOil's COM ribbon:\n"
-              "using the xlOil.xlam ribbon instead.\n")
-    modules = [_RIBBON_MODULES["xlam" if use_xlam else "com"]]
+    kind = _ribbon_kind(addins_must_be_signed(), _ribbon_choice())
+    if kind == "xlam":
+        print("Ribbon: xlOil.xlam (Office policy here requires signed add-ins, which blocks the COM ribbon, or you "
+              "chose it with `xloil ribbon xlam`)\n")
+    elif kind == "off":
+        print("Ribbon: off, as you chose (`xloil ribbon com` turns it back on)\n")
+    modules = [_RIBBON_MODULES[kind]] if kind in _RIBBON_MODULES else []
     for f in chosen:
         modules += list(f.modules)
     own = _user_modules()
@@ -863,8 +887,7 @@ def setup(features: str = None, yes: bool = False, no_pip: bool = False, intelli
     modules = order_modules(modules + [m for m in own if m not in modules])
 
     _install_cmd(load_modules=",".join(modules))
-    if use_xlam:
-        ribbon("xlam")
+    ribbon(kind)                       # the xlam file in XLSTART follows the choice (copied, or removed when not used)
 
     want_isense = intellisense
     if want_isense is None:

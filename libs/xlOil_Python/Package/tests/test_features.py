@@ -1112,3 +1112,31 @@ def test_clean_waits_for_pip_and_removes_logs(tmp_path, monkeypatch):
     cl._clean_xloil()
     assert sorted(p.name for p in app.iterdir()) == ["xlOil.ini.before-debug.bak"]
     assert ran and ran[0][-3:] == ["uninstall", "--yes", "xloil"]
+
+
+def test_setup_keeps_the_chosen_ribbon(ini_copy, monkeypatch):
+    """Re-running setup (an upgrade) keeps the ribbon chosen before (xlam or off); a first install gets the COM ribbon;
+    the signed-add-ins policy always gets xlam (0.22.1.post13 reset an xlam choice to COM and left xlOil.xlam behind)"""
+    from xloil import command_line as cl
+    assert cl._ribbon_kind(False, None) == "com"
+    assert cl._ribbon_kind(False, "com") == "com"
+    assert cl._ribbon_kind(False, "xlam") == "xlam"
+    assert cl._ribbon_kind(False, "off") == "off"
+    assert cl._ribbon_kind(True, "off") == "xlam"
+    for mods, want in (('["xloil.xlam_ribbon", "xloil.pandas"]', "xlam"), ('["xloil.xloil_ribbon"]', "com"),
+                       ('["xloil.pandas"]', "off")):
+        cl.config_set("xlOil_Python.LoadModules", mods, ini=str(ini_copy))
+        assert cl._ribbon_choice(str(ini_copy)) == want
+    assert cl._ribbon_choice(str(ini_copy.parent / "missing.ini")) is None
+    cl.config_set("xlOil_Python.LoadModules", '["xloil.xlam_ribbon", "mytools"]', ini=str(ini_copy))
+    captured = {}
+    monkeypatch.setattr(cl, "_ribbon_choice", lambda ini=None, _f=cl._ribbon_choice: _f(str(ini_copy)))
+    monkeypatch.setattr(cl, "_user_modules", lambda ini=None, _f=cl._user_modules: _f(str(ini_copy)))
+    monkeypatch.setattr(cl, "_install_cmd", lambda load_modules=None, **kw: captured.setdefault("mods", load_modules))
+    monkeypatch.setattr(cl, "addins_must_be_signed", lambda version=None: False)
+    monkeypatch.setattr(cl, "ribbon", lambda kind, ini=None: captured.setdefault("ribbon", kind))
+    monkeypatch.setattr(cl, "_check_bitness", lambda: True)
+    monkeypatch.setattr(cl, "doctor", lambda: 0)
+    cl.setup(features="pandas", yes=True, no_pip=True, intellisense=False)
+    assert captured["ribbon"] == "xlam" and "xloil.xlam_ribbon" in captured["mods"].split(",")
+    assert "xloil.xloil_ribbon" not in captured["mods"].split(",") and "mytools" in captured["mods"].split(",")

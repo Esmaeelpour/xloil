@@ -4,6 +4,17 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post14
+
+From an upgrade check (post12 to post13 with the one-line installer):
+
+- Fixed: rerunning the installer (or `xloil setup`) reset a ribbon chosen with `xloil ribbon xlam` or `off` back to
+  the COM ribbon and left `xlOil.xlam` in XLSTART, so Excel loaded both. Setup now keeps the ribbon already in the
+  settings file; the signed-add-ins policy still always gets xlam, and a first install still gets the COM ribbon.
+- Quieter install: pip's "A new release of pip is available" notice is off in the installer and in `xloil setup`
+  (Windows PowerShell showed it as a red NativeCommandError, which looked like a failure).
+- CI: the stub tests also run on Python 3.14.
+
 ## 0.22.1.post13
 
 From a clean-install check on a laptop (python.org venv and a conda env, each with its own settings folder):
