@@ -149,7 +149,7 @@ while (Get-Process EXCEL -ErrorAction SilentlyContinue) {
     Read-Host "then press Enter to continue" | Out-Null
 }
 
-& $Python -m pip install --upgrade $dest
+& $Python -m pip install --upgrade --no-warn-script-location $dest   # xlOil runs as python -m xloil: PATH does not matter
 if ($LASTEXITCODE -ne 0) { Fail "pip install failed" }
 
 # 4. Guided setup: features, add-in install, checks

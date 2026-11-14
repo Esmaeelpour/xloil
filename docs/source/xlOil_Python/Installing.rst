@@ -52,7 +52,7 @@ command prompt *in the Python environment you want Excel to use*:
 
 .. code-block:: bat
 
-    pip install xloil-0.22.1.post12-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post13-cp312-cp312-win_amd64.whl
     xloil setup
 
 ``xloil setup`` is the guided set-up. ``--features pandas,polars,charts,qt,intellisense,cache``
@@ -122,7 +122,7 @@ Optional extras install the libraries for particular features:
 
 .. code-block:: bat
 
-    pip install "xloil-0.22.1.post12-cp312-cp312-win_amd64.whl[all]"      :: everything below
+    pip install "xloil-0.22.1.post13-cp312-cp312-win_amd64.whl[all]"      :: everything below
     pip install "xloil-...whl[pandas]"      :: DataFrames
     pip install "xloil-...whl[polars]"      :: polars
     pip install "xloil-...whl[plotting]"    :: matplotlib, plotly, Qt WebEngine charts
@@ -139,7 +139,7 @@ environment*:
 
     conda create -n xl python=3.12 pandas
     conda activate xl
-    pip install xloil-0.22.1.post12-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post13-cp312-cp312-win_amd64.whl
     xloil install
 
 Unlike python.org installs, an embedded conda interpreter cannot find its
@@ -207,6 +207,24 @@ Distributing an add-in to colleagues
 * **Locked-down / offline computers**: download the wheels for your dependencies
   on a connected machine (``pip download xloil-...whl -d wheels``) and install
   with ``pip install --no-index --find-links wheels xloil``.
+
+Upgrading and removing
+----------------------
+
+**Upgrade:** close Excel and run the same one-line installer again. It installs the newest release into the same
+Python, keeps your settings, your own modules in ``LoadModules`` and the ribbon you chose, and asks you to close Excel
+if it is still running.
+
+**Remove xlOil from Excel** (the package stays, settings kept)::
+
+    python -m xloil.command_line remove
+
+It deletes the add-in and the ``xlOil.xlam`` ribbon from ``XLSTART``. The IntelliSense add-in stays (other add-ins can
+use it): ``python -m xloil.command_line intellisense remove`` removes it.
+
+**Remove everything** (add-in, ribbon, settings, logs and the package)::
+
+    python -m xloil.command_line clean
 
 Troubleshooting
 ---------------
