@@ -1140,3 +1140,45 @@ def test_setup_keeps_the_chosen_ribbon(ini_copy, monkeypatch):
     cl.setup(features="pandas", yes=True, no_pip=True, intellisense=False)
     assert captured["ribbon"] == "xlam" and "xloil.xlam_ribbon" in captured["mods"].split(",")
     assert "xloil.xloil_ribbon" not in captured["mods"].split(",") and "mytools" in captured["mods"].split(",")
+
+
+def test_setup_keeps_the_chosen_features(ini_copy, monkeypatch):
+    """Re-running setup with --yes (the installer's -Yes upgrade) keeps the features the settings already turn on;
+    a first install gets pandas and charts (0.22.1.post14 replaced a Qt choice with pandas and charts)"""
+    from xloil import command_line as cl
+    assert cl._feature_defaults(str(ini_copy.parent / "missing.ini")) == {"pandas", "charts"}
+    cl.config_set("xlOil_Python.LoadModules", '["xloil.xloil_ribbon", "xloil.gui.qtpy", "xloil.plotting"]',
+                  ini=str(ini_copy))
+    assert cl._feature_defaults(str(ini_copy)) == {"qt"}
+    cl.config_set("xlOil_Python.LoadModules", '["xloil.xloil_ribbon"]', ini=str(ini_copy))
+    assert cl._feature_defaults(str(ini_copy)) == {"pandas", "charts"}
+    cl.config_set("xlOil_Python.LoadModules", '["xloil.xloil_ribbon", "xloil.gui.qtpy", "xloil.plotting"]',
+                  ini=str(ini_copy))
+    captured = {}
+    for name in ("_ribbon_choice", "_user_modules", "_feature_defaults"):
+        monkeypatch.setattr(cl, name, lambda ini=None, _f=getattr(cl, name): _f(str(ini_copy)))
+    monkeypatch.setattr(cl, "_install_cmd", lambda load_modules=None, **kw: captured.setdefault("mods", load_modules))
+    monkeypatch.setattr(cl, "addins_must_be_signed", lambda version=None: False)
+    monkeypatch.setattr(cl, "ribbon", lambda kind, ini=None: None)
+    monkeypatch.setattr(cl, "_check_bitness", lambda: True)
+    monkeypatch.setattr(cl, "doctor", lambda: 0)
+    import xloil.features as feats
+    monkeypatch.setattr(feats, "feature_available", lambda f: True)
+    cl.setup(yes=True, no_pip=True, intellisense=False)
+    mods = captured["mods"].split(",")
+    assert "xloil.gui.qtpy" in mods and "xloil.plotting" in mods
+    assert "xloil.pandas" not in mods and "xloil.matplotlib" not in mods
+
+
+def test_config_set_takes_a_list_powershell_stripped(ini_copy):
+    """Windows PowerShell 5.1 strips the inner double quotes it passes to a program: xloil config set ...
+    '["a", "b"]' arrives as [a, b], which was rejected; bare module names in brackets are taken as that list"""
+    from xloil import command_line as cl
+    cl.config_set("xlOil_Python.LoadModules", "[xloil.xloil_ribbon, xloil.gui.qtpy, my_tools]", ini=str(ini_copy))
+    assert cl._load_modules(str(ini_copy)) == ["xloil.xloil_ribbon", "xloil.gui.qtpy", "my_tools"]
+    cl.config_set("xlOil_Python.LoadModules", "[]", ini=str(ini_copy))
+    assert cl._load_modules(str(ini_copy)) == []
+    with pytest.raises(ValueError, match="square brackets"):
+        cl.config_set("xlOil_Python.LoadModules", "xloil.pandas", ini=str(ini_copy))
+    with pytest.raises(ValueError, match="square brackets"):
+        cl.config_set("xlOil_Python.LoadModules", "[a b, c]", ini=str(ini_copy))

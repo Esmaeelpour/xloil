@@ -4,6 +4,17 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post15
+
+From upgrading the real install on a laptop (conda base, packages in the user site):
+
+- Fixed: rerunning the installer with `-Yes` (or `xloil setup --yes`) replaced the features you had turned on
+  with the first-install defaults: a Qt setup lost `xloil.gui.qtpy` and gained pandas and charts. Setup now offers
+  the features the settings file already has as the defaults; a first install still gets pandas and charts.
+- Fixed: `xloil config set xlOil_Python.LoadModules '["a", "b"]'` failed from Windows PowerShell 5.1, which
+  strips the inner double quotes it passes to a program (`[a, b]` arrived). Bare module names in brackets are
+  now taken as that list; anything else still gets the "square brackets" error.
+
 ## 0.22.1.post14
 
 From an upgrade check (post12 to post13 with the one-line installer):
