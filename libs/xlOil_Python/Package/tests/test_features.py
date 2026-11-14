@@ -1247,3 +1247,30 @@ def test_setup_without_excel_says_so_before_installing(monkeypatch, capsys):
         cl.install_xloil()
     monkeypatch.setattr(cl, "_find_excel_version", lambda: 16)
     assert cl._excel_installed() is True
+
+
+def test_how_to_use_examples_run(tmp_path, monkeypatch):
+    """Every Python example on the How to Use page runs as written, and gives the results the page states"""
+    import importlib, re
+    page = Path(__file__).resolve().parents[4] / "docs/source/xlOil_Python/HowToUse.rst"
+    if not page.exists():
+        pytest.skip("not in the source tree")
+    blocks = re.findall(r"\.\. code-block:: python\n\n((?:    .*\n|\s*\n)+)", page.read_text(encoding="utf-8"))
+    code = "\n".join("\n".join(l[4:] for l in b.splitlines()) for b in blocks)
+    (tmp_path / "howto_examples.py").write_text(code, encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.delitem(sys.modules, "howto_examples", raising=False)
+    mod = importlib.import_module("howto_examples")
+    assert xt.call(mod.Greeting, "world") == "Hello world"
+    assert xt.spec(mod.Greeting).help == "Says hello"
+    assert xt.call(mod.Discounted, 200) == pytest.approx(180)
+    assert xt.call(mod.Discounted, 200, 25) == pytest.approx(150)
+    assert list(xt.call(mod.Normalise, np.array([1.0, 3.0]))) == [0.25, 0.75]
+    import pandas as pd
+    sales = pd.DataFrame({"region": ["N", "S", "N"], "sales": [10, 5, 7]})
+    assert xt.call(mod.Totals, sales, "region").to_dict("list") == {"region": ["N", "S"], "sales": [17, 5]}
+    assert xt.call(mod.ModelValue, xt.call(mod.MakeModel, 0.05), 100) == pytest.approx(105)
+    assert len(xt.take(mod.Clock, 1)[0]) == 8
+    assert "command" in xt.spec(mod.FillDates).features
+    for name in ("LineChart", "ClearFormats"):
+        assert callable(getattr(mod, name))

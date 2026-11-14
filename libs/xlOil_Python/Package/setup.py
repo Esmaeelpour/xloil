@@ -74,11 +74,11 @@ setup(
     description="Excel interop for Python and Jupyter",
     long_description=contents_of_readme,
     long_description_content_type="text/markdown",
-    maintainer="Esmaeelpour (fork with PyXLL-parity features)",
+    maintainer="Esmaeelpour (fork)",
     url="https://github.com/Esmaeelpour/xloil",
     download_url='https://github.com/Esmaeelpour/xloil/releases',
     project_urls = {
-      'Documentation': 'https://github.com/Esmaeelpour/xloil/tree/feature/pyxll-parity/docs/source',
+      'Documentation': 'https://github.com/Esmaeelpour/xloil/tree/master/docs/source',
       'Upstream': 'https://github.com/cunnane/xloil',
     },
     license='Apache',

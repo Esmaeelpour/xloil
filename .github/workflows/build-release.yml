@@ -268,5 +268,5 @@ jobs:
           fi
           # Created as a draft: test the files, then publish it
           gh release create "${GITHUB_REF_NAME}" dist/* --draft \
-            --title "xlOil ${GITHUB_REF_NAME} (PyXLL-parity fork)" \
+            --title "xlOil ${GITHUB_REF_NAME} (Esmaeelpour fork)" \
             --notes-file CHANGELOG-fork.md

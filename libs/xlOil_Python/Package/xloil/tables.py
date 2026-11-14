@@ -14,7 +14,7 @@
     **Returning** - return a DataFrame with the `xloil.TableReturn` annotation to
     write it as a formatted Excel Table next to the calling cell. Excel does not
     allow formulas to spill into tables, so xlOil writes the table just after the
-    calculation cycle (like PyXLL's table return). Each recalculation updates the
+    calculation cycle. Each recalculation updates the
     same table, resizing it as needed::
 
         @xlo.func

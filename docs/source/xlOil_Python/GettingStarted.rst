@@ -30,6 +30,11 @@ For examples of worksheet functions and GUI controls have a look at :doc:`Exampl
 Getting Started
 ---------------
 
+.. note::
+    For this fork, install with the one-line installer in :doc:`Installing`, then follow
+    :doc:`HowToUse` for a step-by-step guide to writing and using your own functions.
+    The rest of this page is the upstream introduction.
+
 **You must use the same bit-ness of python and Excel**.  So if your Excel is 32-bit, you must
 install xloil using a 32-bit python distibution.
 

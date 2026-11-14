@@ -3,7 +3,7 @@ Fork Features: Overview
 =======================
 
 This fork of xlOil (`Esmaeelpour/xloil <https://github.com/Esmaeelpour/xloil>`_)
-adds features which close the main gaps between xlOil and PyXLL. Everything
+adds features for charts, sheet widgets, data handling and developer tools. Everything
 is implemented in the ``xloil`` Python package on top of xlOil's existing core,
 so the compiled add-in is unchanged from upstream and existing code keeps
 working. The features are opt-in: you import a module or pass a new decorator
