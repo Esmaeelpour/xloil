@@ -1,5 +1,5 @@
 {
   "note": "CI reuses the x64 binaries from this release's bin zip while the native sources still match source_hash (python tools/native_hash.py). After a release whose freshly compiled binaries passed a Windows Defender scan, update both fields to that release.",
-  "release": "v0.22.1.post1",
-  "source_hash": "88c9e381fe09821ab6e4cd6f0feedb6fd0c81d370962226d597b421d36b17986"
+  "release": "v0.22.1.post12",
+  "source_hash": "64acb678b7b05c44ddd772a5a9c8631e8d6f157f8f9516fd4b28187150617484"
 }
