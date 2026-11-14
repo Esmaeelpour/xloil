@@ -1186,14 +1186,17 @@ def test_config_set_takes_a_list_powershell_stripped(ini_copy):
 
 def test_one_line_installer_uses_iex_of_irm():
     """The documented one-liner is `iex (irm URL)`: `irm URL | iex` failed in a conda-initialised Windows PowerShell 5.1
-    ("The terminator '#>' is missing from the multiline comment"), 3 runs of 3; `iex (irm URL)` ran 3 of 3"""
+    ("The terminator '#>' is missing from the multiline comment"), 3 runs of 3; `iex (irm URL)` ran 3 of 3.
+    -NoProfile: the profile's conda hook re-activated base in the child shell, so an activated conda env was ignored
+    and xlOil went into base"""
     root = Path(__file__).resolve().parents[4]
     for rel in ("tools/install.ps1", "docs/source/xlOil_Python/Installing.rst"):
         p = root / rel
         if not p.exists():
             pytest.skip("not in the source tree")
         text = p.read_text(encoding="utf-8")
-        assert "iex (irm https://github.com/Esmaeelpour/xloil/releases/latest/download/install.ps1)" in text, rel
+        assert ('powershell -NoProfile -ExecutionPolicy Bypass -c "iex (irm '
+                'https://github.com/Esmaeelpour/xloil/releases/latest/download/install.ps1)"') in text, rel
         assert 'install.ps1 | iex"' not in text, rel
 
 
