@@ -4,6 +4,17 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post20
+
+- Every xlOil binary (`xlOil.dll`, `xlOil.xll`, the `xlOil_*.dll` / `.pyd` plugins) now carries Windows version
+  information: product, version, company, description, copyright and original file name, shown under
+  *Properties > Details*. Unlabelled DLLs are more likely to be flagged by heuristic anti-virus: Microsoft
+  Defender reported `Trojan:Win32/Bearfoos.A!ml` on the post17 `xlOil.dll`, while a Defender scan of this
+  build's wheels and binaries found no threats. CI fails if a shipped xlOil binary lacks the version details.
+- Natively compiled again (earlier releases since post12 reused the post12 binaries).
+- Docs: new *How to Use xlOil* guide, checked by a test that runs its code examples; *Anti-virus warnings*
+  section in Installing (what the detection means, how to check the file, how to report it).
+
 ## 0.22.1.post19
 
 Found by the new install smoke test (`.github/workflows/install-smoke.yml`), which runs the documented one-liner,
