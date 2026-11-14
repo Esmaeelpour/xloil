@@ -10,10 +10,11 @@
     Run from a normal PowerShell window (in an activated conda env or venv if
     you want xlOil to use that environment):
 
-        powershell -ExecutionPolicy Bypass -c "iex (irm https://github.com/Esmaeelpour/xloil/releases/latest/download/install.ps1)"
+        powershell -NoProfile -ExecutionPolicy Bypass -c "iex (irm https://github.com/Esmaeelpour/xloil/releases/latest/download/install.ps1)"
 
-    (Not `irm ... | iex`: in a conda-initialised Windows PowerShell 5.1 that form fails with
-    a "terminator is missing from the multiline comment" parse error.)
+    (-NoProfile: a conda-initialised profile runs `conda activate base` in the new shell, which
+    replaced the env you activated. Not `irm ... | iex`: with that profile it fails with a
+    "terminator is missing from the multiline comment" parse error.)
 
     Or download it and run with options:
 

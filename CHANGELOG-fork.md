@@ -4,6 +4,14 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post18
+
+- Fixed: in a conda-initialised PowerShell the one-liner installed into conda base even with another conda env
+  activated: the new `powershell` it starts loads the profile, whose conda hook runs `conda activate base`. The
+  documented command is now `powershell -NoProfile -ExecutionPolicy Bypass -c "iex (irm <url>)"`. Checked with
+  a fresh conda env on Python 3.14: the env was used, doctor found no problems and Excel ran Python (first
+  Excel run of the cp314 wheel). A Troubleshooting row covers it.
+
 ## 0.22.1.post17
 
 - Fixed: `xloAttr` / `xloAttrObj` returned built-in methods uncalled: `=xloAttr("abc","upper")` gave

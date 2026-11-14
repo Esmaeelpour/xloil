@@ -29,7 +29,7 @@ Excel to use first) and run:
 
 .. code-block:: powershell
 
-    powershell -ExecutionPolicy Bypass -c "iex (irm https://github.com/Esmaeelpour/xloil/releases/latest/download/install.ps1)"
+    powershell -NoProfile -ExecutionPolicy Bypass -c "iex (irm https://github.com/Esmaeelpour/xloil/releases/latest/download/install.ps1)"
 
 The installer:
 
@@ -52,7 +52,7 @@ command prompt *in the Python environment you want Excel to use*:
 
 .. code-block:: bat
 
-    pip install xloil-0.22.1.post17-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post18-cp312-cp312-win_amd64.whl
     xloil setup
 
 ``xloil setup`` is the guided set-up. ``--features pandas,polars,charts,qt,intellisense,cache``
@@ -122,7 +122,7 @@ Optional extras install the libraries for particular features:
 
 .. code-block:: bat
 
-    pip install "xloil-0.22.1.post17-cp312-cp312-win_amd64.whl[all]"      :: everything below
+    pip install "xloil-0.22.1.post18-cp312-cp312-win_amd64.whl[all]"      :: everything below
     pip install "xloil-...whl[pandas]"      :: DataFrames
     pip install "xloil-...whl[polars]"      :: polars
     pip install "xloil-...whl[plotting]"    :: matplotlib, plotly, Qt WebEngine charts
@@ -139,7 +139,7 @@ environment*:
 
     conda create -n xl python=3.12 pandas
     conda activate xl
-    pip install xloil-0.22.1.post17-cp312-cp312-win_amd64.whl
+    pip install xloil-0.22.1.post18-cp312-cp312-win_amd64.whl
     xloil install
 
 Unlike python.org installs, an embedded conda interpreter cannot find its
@@ -257,7 +257,10 @@ Interactive charts show as pictures                    No Qt WebEngine: ``pip in
                                                        ``xloil.gui.qtpy`` before ``xloil.plotting``
 "is not a valid Win32 application"                     32-bit Excel or Python: use 64-bit for both
 "The terminator '#>' is missing from the               The older ``irm ... | iex`` form of the one-line
-multiline comment" from the one-line installer         command; use ``iex (irm ...)`` as shown above
+multiline comment" from the one-line installer         command; use the command shown above
+Installer uses conda base, not the env you activated   Your profile re-activates base in the new shell:
+                                                       use the command above (``-NoProfile``) or pass
+                                                       ``-Python <env>\python.exe`` to ``install.ps1``
 Functions using ``xloil.app()`` fail                   ``pip install pywin32``
 =====================================================  =================================================
 
