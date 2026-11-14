@@ -44,7 +44,9 @@ def _xlo_attr_helper(Object, Name:str, *Args, **Kwargs):
     attr = getattr(Object, Name)
 
     import inspect
-    if inspect.ismethod(attr) or inspect.isfunction(attr):
+    # isroutine, not ismethod/isfunction: built-in methods such as str.upper are routines too (they were returned
+    # uncalled). Classes are still returned, not instantiated.
+    if inspect.isroutine(attr):
         return attr(*Args, **Kwargs)
     else:
         return attr

@@ -4,6 +4,12 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post17
+
+- Fixed: `xloAttr` / `xloAttrObj` returned built-in methods uncalled: `=xloAttr("abc","upper")` gave
+  `builtin_function_or_method` instead of `ABC` (only Python-defined methods and functions were called). Every
+  routine is now called with the given arguments; classes and plain attributes are returned as before.
+
 ## 0.22.1.post16
 
 From running the documented one-line installer in a real terminal (conda-initialised Windows PowerShell 5.1):

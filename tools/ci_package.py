@@ -5,7 +5,7 @@
 
     Usage (from the repository root, after `msbuild xlOil.sln /p:Configuration=Release /p:Platform=x64`):
 
-        python tools/ci_package.py --version 0.22.1.post16 --python C:/py310/python.exe --python C:/py312/python.exe
+        python tools/ci_package.py --version 0.22.1.post17 --python C:/py310/python.exe --python C:/py312/python.exe
 
     Produces in build/dist:
         xlOil-<version>-x64-bin.zip    the add-in binaries, ini and scripts
@@ -36,7 +36,7 @@ def python_version(exe: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--version", required=True, help="Package version, e.g. 0.22.1.post16")
+    parser.add_argument("--version", required=True, help="Package version, e.g. 0.22.1.post17")
     parser.add_argument("--python", action="append", default=[], help="Python executable to build a wheel for")
     parser.add_argument("--bin-dir", default=str(BUILD / ARCH / "Release"))
     args = parser.parse_args()
