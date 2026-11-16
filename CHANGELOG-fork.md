@@ -4,6 +4,15 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post22
+
+- Fixed: Excel could close (crash in `python3x.dll`) when a workbook module imported a large package on a
+  background thread, seen with build123d on Python 3.13. Packages that pip installed in the user site-packages
+  (`%APPDATA%\Python\PythonXY\site-packages`, used when the environment is not writable, for example an
+  all-users Anaconda) each got their own directory watcher for auto-reload, hundreds for one large package, created
+  on that thread. The user site-packages is now watched as one folder, like the environment's own site-packages,
+  and any other watcher for a module imported on a background thread is created on Excel's main thread.
+
 ## 0.22.1.post21
 
 - Fixed: the ribbon's Log Level box showed the running logger's level (often *info*) instead of the `LogLevel`
