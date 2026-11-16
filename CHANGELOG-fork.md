@@ -4,7 +4,11 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
-## 0.22.1.post22
+## 0.22.1.post23
+
+The post22 fix below, released: post22 was tagged but not released (a CI test runner had no Python 3.9).
+
+## 0.22.1.post22 (not released)
 
 - Fixed: Excel could close (crash in `python3x.dll`) when a workbook module imported a large package on a
   background thread, seen with build123d on Python 3.13. Packages that pip installed in the user site-packages
