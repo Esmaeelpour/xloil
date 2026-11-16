@@ -4,6 +4,14 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post25
+
+- Fixed (root cause of the post24 crash): `Range.special_cells` released the GIL for the COM call and then built
+  its Python result without it, an access violation in `python3x.dll` whenever cells were found. Only the COM call
+  now runs without the GIL.
+- Fixed: `Application.workbook_paths` always returned `None`; it now returns the set of open workbook paths.
+- Natively compiled again (post21-post24 reused the post20 binaries).
+
 ## 0.22.1.post24
 
 - Fixed: Excel closed (access violation in `python3x.dll`) when a workbook with `#NAME?` cells loaded its workbook
