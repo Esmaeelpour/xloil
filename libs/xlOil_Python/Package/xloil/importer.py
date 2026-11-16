@@ -6,6 +6,7 @@ import sys
 import os
 import inspect
 import site
+import threading
 from importlib.machinery import SourceFileLoader
 from types import ModuleType
 from typing import List, Dict
@@ -15,8 +16,32 @@ from ._core import StatusBar, Addin, XLOIL_EMBEDDED, Singleton, StatusBarExecuto
 from .logging import log, log_except
 from ._superreload import superreload
 
-_linked_workbooks = dict() # Stores the workbooks associated with an source file 
+_linked_workbooks = dict() # Stores the workbooks associated with an source file
 _PATH_FINDER = None
+
+
+def _site_dirs() -> List[str]:
+    """The environment's prefixes and site-packages folders, user site included, that exist; nested ones dropped."""
+    dirs = list(site.PREFIXES)
+    try:
+        dirs += site.getsitepackages()
+    except AttributeError:
+        pass
+    try:
+        if site.ENABLE_USER_SITE is not False:
+            dirs.append(site.getusersitepackages())
+    except AttributeError:
+        pass
+    out = []
+    for d in sorted({os.path.normcase(os.path.abspath(d)) for d in dirs if d and os.path.isdir(d)}, key=len):
+        if not _under(d, out):
+            out.append(d)
+    return out
+
+
+def _under(path: str, dirs) -> bool:
+    p = os.path.normcase(os.path.abspath(path))
+    return any(p == d or p.startswith(d.rstrip(os.sep) + os.sep) for d in dirs)
 
 
 class ImportHelper(metaclass=Singleton):
@@ -39,8 +64,12 @@ class ImportHelper(metaclass=Singleton):
         # Inevitably many files will be imported from the environment's site-packages
         # directories and it is unlikely that any of these files will be modified at
         # runtime. To simplify the event structure, create a sub-dir watcher for each
-        # site package location
-        for prefix in site.PREFIXES:
+        # site package location. This includes the user site-packages
+        # (%APPDATA%\Python\PythonXY\site-packages), where pip installs when the
+        # environment is not writable, e.g. an all-users Anaconda: without it every
+        # module of a large package there got its own directory watcher.
+        self._site_dirs = _site_dirs()
+        for prefix in self._site_dirs:
             event = xloil_core.event.file_change(prefix, subdirs=True)
             event += self._on_file_modified
         
@@ -84,11 +113,20 @@ class ImportHelper(metaclass=Singleton):
                 
         # Any file in one the site package directories will be handled
         # by the watchers created in the __init__ method
-        if not any((filepath.startswith(x) for x in site.PREFIXES)):
-            import xloil_core
-            event = xloil_core.event.file_change(filepath)
-            event += self._on_file_modified
-        
+        if not _under(filepath, self._site_dirs):
+            if threading.current_thread() is threading.main_thread():
+                self._add_watch(filepath)
+            else:
+                # Imported on a background thread (e.g. a workbook module warming up a
+                # large package): create the watcher on Excel's main thread, as for any
+                # other import. Creating it here raced with the file watcher firing
+                # and crashed Excel inside python3x.dll (Python 3.13, 2026-11-16).
+                import xloil_core
+                try:
+                    xloil_core.excel_callback(lambda: self._add_watch(filepath))
+                except Exception as e:
+                    log.debug(f"No reload watch for {filepath}: {e}")
+
         # If _import_and_scan has not written addin info for this module name
         # we use the core addin as the most likely choice of originator.
         import xloil_core
@@ -97,6 +135,11 @@ class ImportHelper(metaclass=Singleton):
             xloil_core.core_addin().pathname)
         self._watched[filepath] = module.__name__
      
+    def _add_watch(self, filepath):
+        import xloil_core
+        event = xloil_core.event.file_change(filepath)
+        event += self._on_file_modified
+
     def _on_file_modified(self, filepath):
         module_name = self._watched.get(filepath, None)
         if module_name is None:
