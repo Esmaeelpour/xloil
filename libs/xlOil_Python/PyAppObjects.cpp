@@ -249,13 +249,19 @@ namespace xloil
         if (!values.is_none())
           cellValues = specialCellsValueHelper(values);
 
-        py::gil_scoped_release noGil;
-        auto result = ExcelRange(r).specialCells(
-          specialCellsType, (ExcelType)cellValues);
+        // Only the COM call runs without the GIL: the Python result must be built
+        // with it held (building it without the GIL crashed Excel in python3x.dll
+        // whenever cells were found, 2026-11-16)
+        auto result = [&]()
+        {
+          py::gil_scoped_release noGil;
+          return ExcelRange(r).specialCells(
+            specialCellsType, (ExcelType)cellValues);
+        }();
         if (!result.valid())
           return py::none();
         else
-          return py::cast(result);
+          return py::cast(std::move(result));
       }
 
       py::object range_Areas(Range& r)
@@ -1415,7 +1421,7 @@ namespace xloil
           call_release_gil(),
           "A collection of all Windows open in this Application")
         .def_property_readonly("workbook_paths",
-          [](Application& app) { app.workbookPaths(); },
+          [](Application& app) { return app.workbookPaths(); },
           call_release_gil(),
           "A set of the full path names of all workbooks open in this Application. "
           "Does not use COM interface.")

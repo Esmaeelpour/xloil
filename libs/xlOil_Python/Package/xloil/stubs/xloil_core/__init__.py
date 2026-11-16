@@ -402,11 +402,11 @@ class Application():
         :type: ExcelWindows
         """
     @property
-    def workbook_paths(self) -> None:
+    def workbook_paths(self) -> typing.Set[str]:
         """
         A set of the full path names of all workbooks open in this Application. Does not use COM interface.
 
-        :type: None
+        :type: typing.Set[str]
         """
     @property
     def workbooks(self) -> Workbooks:
