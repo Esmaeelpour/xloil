@@ -4,7 +4,16 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
-## 0.22.1.post23
+## 0.22.1.post24
+
+- Fixed: Excel closed (access violation in `python3x.dll`) when a workbook with `#NAME?` cells loaded its workbook
+  module. After the module's functions register, xlOil re-enters the workbook's `#NAME?` formulas
+  (`fix_name_errors`); it found them with `Range.special_cells`, which built its Python result without holding the
+  GIL. `fix_name_errors` (also the ribbon's *Fix #NAME? errors*) now finds the cells through the COM object model.
+  Crashed every time on a Python 3.13 laptop, intermittently on Python 3.10.
+- Includes the post22 change below (post22 and post23 were tagged but not released).
+
+## 0.22.1.post23 (not released)
 
 The post22 fix below, released: post22 was tagged but not released (a CI test runner had no Python 3.9).
 

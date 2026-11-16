@@ -179,10 +179,15 @@ def fix_name_errors(workbook):
 
         May not be performant in large workbooks with many errors.
     """
+    # Found through the COM object model: Range.special_cells built its Python result
+    # without holding the GIL, which crashed Excel (access violation in python3x.dll)
+    # whenever a sheet had error cells, i.e. every time this had anything to fix.
+    XL_CELL_TYPE_FORMULAS, XL_ERRORS = -4123, 16
     for ws in workbook.worksheets:
-        errors = ws.used_range.special_cells("formulas", "errors")
-        if errors is None:
+        try:
+            errors = ws.to_com().UsedRange.SpecialCells(XL_CELL_TYPE_FORMULAS, XL_ERRORS)
+        except Exception:       # COM raises "No cells were found" when there are none
             continue
         for cell in errors:
-            if cell.Value2 == _core.CellError.NAME.value:
+            if str(cell.Text) == "#NAME?":
                 cell.Formula = cell.Formula
