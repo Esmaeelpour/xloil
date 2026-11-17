@@ -4,6 +4,17 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post28
+
+post27's changes without its Qt binding preference (post27 was built but not published).
+
+- Removed (from post27): preferring a Qt binding that has Qt WebEngine when `QT_API` is unset. On a PC with PyQt5
+  (no WebEngine) and PySide6 6.12 (with it), it moved Excel to PySide6, and Excel with Qt 6 WebEngine loaded crashed
+  on every exit in `Qt6WebEngineCore.dll` (0x80000003), even when no view had been shown; Windows then restarted
+  Excel. Set `QT_API` yourself to choose a binding. That exit crash is an open issue.
+- Changed: the Qt thread's shutdown closes and deletes its widgets and ends the event loop with `exit(0)`; Qt 6's
+  `quit()` asks the windows first and can be refused.
+
 ## 0.22.1.post27
 
 Sheet controls and interactive charts inside the grid, tested in real Excel (Qt 6 / PySide6, Python 3.10). Python

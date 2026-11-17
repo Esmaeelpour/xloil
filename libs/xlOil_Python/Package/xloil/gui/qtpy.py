@@ -16,47 +16,6 @@ import threading
 from pathlib import Path
 
 
-def _choose_binding():
-    """
-        With QT_API unset, qtpy takes the first Qt binding it finds (PyQt5, PySide2, PyQt6,
-        PySide6). If that one has no Qt WebEngine but another installed binding has it, use the
-        other: interactive charts and sheet controls need WebEngine (2026-11-17: PyQt5 without
-        WebEngine was found first and every chart stayed a picture although PySide6 had it).
-        Must run before qtpy is imported. Set QT_API to choose yourself.
-    """
-    if os.environ.get("QT_API") or "qtpy" in sys.modules:
-        return
-    import importlib.util
-
-    def folders(pkg):                                    # finds the package without importing it
-        try:
-            spec = importlib.util.find_spec(pkg)
-        except Exception:
-            return []
-        return list(spec.submodule_search_locations or []) if spec else []
-
-    def has_webengine(pkg):                              # a file test: importing a binding here, before
-        for folder in folders(pkg):                      # xlOil's DLL set-up, broke its later import
-            try:
-                if any(n.startswith("QtWebEngineWidgets.") for n in os.listdir(folder)):
-                    return True
-            except OSError:
-                pass
-        return False
-    bindings = [(api, pkg) for api, pkg in (("pyqt5", "PyQt5"), ("pyside2", "PySide2"),
-                                           ("pyqt6", "PyQt6"), ("pyside6", "PySide6")) if folders(pkg)]
-    if not bindings or has_webengine(bindings[0][1]):
-        return
-    for api, pkg in bindings[1:]:
-        if has_webengine(pkg):
-            os.environ["QT_API"] = api
-            log.info(f"Qt: using {pkg}, which has Qt WebEngine ({bindings[0][1]} has not); set QT_API to choose")
-            return
-
-
-_choose_binding()
-
-
 def _webengine_installed() -> bool:
     """ Checks for Qt WebEngine *without* importing it (importing initialises OpenGL) """
     import importlib.util
@@ -217,8 +176,26 @@ class QtExecutor(_GuiExecutor):
         self._app = None
 
     def _shutdown(self):
-        log.debug("Qt: Recieved shutdown: sending quit call")
-        self._app.quit()
+        """
+            Ends the Qt thread's event loop for certain. Qt 6's quit() first asks every window to
+            close and can be refused, so the loop could keep running while Excel waited for it.
+            The widgets are closed and deleted here, while the loop still runs, then the loop exits.
+        """
+        log.debug("Qt: Recieved shutdown: closing widgets, ending the event loop")
+        app = self._app
+        try:
+            from qtpy.QtCore import QCoreApplication, QEvent
+            for widget in list(app.topLevelWidgets()):
+                try:
+                    widget.close()
+                    widget.deleteLater()
+                except Exception:
+                    pass
+            deferred = getattr(QEvent, "DeferredDelete", None) or QEvent.Type.DeferredDelete
+            QCoreApplication.sendPostedEvents(None, deferred)
+        except Exception as e:
+            log.debug(f"Qt: closing widgets at shutdown: {e}")
+        app.exit(0)
 
 
 _Qt_thread = None

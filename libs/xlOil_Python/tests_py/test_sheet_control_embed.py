@@ -221,37 +221,5 @@ G._GuiExecutor.shutdown(fake)
 check('shutdown: sheet controls detached before the GUI thread is told to quit',
       'detach' in order and order.index('detach') < order.index(('submit', 'quit')), str(order))
 
-# ---- the Qt binding with WebEngine is chosen when qtpy's first choice has none ---------------------------------------
-import ast
-import os
-import tempfile
-
-src = open(os.path.join(os.path.dirname(G.__file__), 'qtpy.py'), encoding='utf-8').read()
-fn = next(n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef) and n.name == '_choose_binding')
-ns = {'os': os, 'sys': types.SimpleNamespace(modules={}), 'log': types.SimpleNamespace(info=lambda m: None)}
-exec(compile(ast.Module([fn], []), 'qtpy.py', 'exec'), ns)
-root = tempfile.mkdtemp()
-for pkg, files in (('PyQt5', ['QtCore.pyd']), ('PySide6', ['QtCore.pyd', 'QtWebEngineWidgets.pyd'])):
-    os.makedirs(os.path.join(root, pkg))
-    for name in files:
-        open(os.path.join(root, pkg, name), 'w').close()
-import importlib.util as IU
-real_find = IU.find_spec
-IU.find_spec = lambda name: (types.SimpleNamespace(submodule_search_locations=[os.path.join(root, name)])
-                             if name in ('PyQt5', 'PySide6') else None)
-saved = os.environ.pop('QT_API', None)
-try:
-    ns['_choose_binding']()
-    check('binding: PySide6 (has WebEngine) over PyQt5 (has not)', os.environ.get('QT_API') == 'pyside6',
-          os.environ.get('QT_API'))
-    os.environ['QT_API'] = 'pyqt5'
-    ns['_choose_binding']()
-    check('binding: QT_API set by the user is kept', os.environ['QT_API'] == 'pyqt5')
-finally:
-    IU.find_spec = real_find
-    os.environ.pop('QT_API', None)
-    if saved is not None:
-        os.environ['QT_API'] = saved
-
 print('\nALL PASS' if not FAIL else f'\n{len(FAIL)} FAILED')
 sys.exit(1 if FAIL else 0)
