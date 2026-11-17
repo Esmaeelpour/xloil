@@ -15,6 +15,48 @@ from xloil._core import XLOIL_EMBEDDED
 import threading
 from pathlib import Path
 
+
+def _choose_binding():
+    """
+        With QT_API unset, qtpy takes the first Qt binding it finds (PyQt5, PySide2, PyQt6,
+        PySide6). If that one has no Qt WebEngine but another installed binding has it, use the
+        other: interactive charts and sheet controls need WebEngine (2026-11-17: PyQt5 without
+        WebEngine was found first and every chart stayed a picture although PySide6 had it).
+        Must run before qtpy is imported. Set QT_API to choose yourself.
+    """
+    if os.environ.get("QT_API") or "qtpy" in sys.modules:
+        return
+    import importlib.util
+
+    def folders(pkg):                                    # finds the package without importing it
+        try:
+            spec = importlib.util.find_spec(pkg)
+        except Exception:
+            return []
+        return list(spec.submodule_search_locations or []) if spec else []
+
+    def has_webengine(pkg):                              # a file test: importing a binding here, before
+        for folder in folders(pkg):                      # xlOil's DLL set-up, broke its later import
+            try:
+                if any(n.startswith("QtWebEngineWidgets.") for n in os.listdir(folder)):
+                    return True
+            except OSError:
+                pass
+        return False
+    bindings = [(api, pkg) for api, pkg in (("pyqt5", "PyQt5"), ("pyside2", "PySide2"),
+                                           ("pyqt6", "PyQt6"), ("pyside6", "PySide6")) if folders(pkg)]
+    if not bindings or has_webengine(bindings[0][1]):
+        return
+    for api, pkg in bindings[1:]:
+        if has_webengine(pkg):
+            os.environ["QT_API"] = api
+            log.info(f"Qt: using {pkg}, which has Qt WebEngine ({bindings[0][1]} has not); set QT_API to choose")
+            return
+
+
+_choose_binding()
+
+
 def _webengine_installed() -> bool:
     """ Checks for Qt WebEngine *without* importing it (importing initialises OpenGL) """
     import importlib.util
@@ -58,6 +100,12 @@ def _prepare_webengine():
     if not _webengine_installed():
         log.debug("Qt WebEngine not installed: interactive charts unavailable")
         return
+    # Inside Excel a WebEngine view painted black (2026-11-17): Chromium's GPU compositing inside a window Excel
+    # owns. Software drawing is plenty for charts and sketches. XLOIL_WEBENGINE_GPU=1 keeps the GPU; flags already
+    # set in QTWEBENGINE_CHROMIUM_FLAGS are kept as they are.
+    if not os.environ.get("XLOIL_WEBENGINE_GPU") and "QTWEBENGINE_CHROMIUM_FLAGS" not in os.environ:
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu --disable-gpu-compositing"
+        log.debug("Qt WebEngine: GPU off (set XLOIL_WEBENGINE_GPU=1 to keep it)")
     try:
         from qtpy.QtCore import Qt, QCoreApplication
         QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)

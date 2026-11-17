@@ -103,6 +103,57 @@ def find_grid_window(xlmain_hwnd: int) -> int:
     return grid
 
 
+def _pane_area(window, pane, grid) -> Optional[Tuple[int, int, int, int]]:
+    """
+        Screen pixels (x0, y0, x1, y1) of the cells the scrollable pane shows: below and right of frozen
+        rows and columns, and above / left of the sheet tabs and scroll bars. A control is clipped to it,
+        so it never covers the frozen headings, the tabs or the scroll bars. None if it cannot be found.
+    """
+    try:
+        vr = pane.VisibleRange
+        left, top = float(vr.Left), float(vr.Top)
+        x0 = int(pane.PointsToScreenPixelsX(left))
+        y0 = int(pane.PointsToScreenPixelsY(top))
+        x1 = int(pane.PointsToScreenPixelsX(left + float(vr.Width)))
+        y1 = int(pane.PointsToScreenPixelsY(top + float(vr.Height)))
+        rc = wt.RECT()
+        _user32.GetClientRect(grid, ctypes.byref(rc))
+        lo, hi = wt.POINT(rc.left, rc.top), wt.POINT(rc.right, rc.bottom)
+        _user32.ClientToScreen(grid, ctypes.byref(lo))
+        _user32.ClientToScreen(grid, ctypes.byref(hi))
+        try:
+            dpi = int(_user32.GetDpiForWindow(grid)) or 96
+            metric = lambda i: int(_user32.GetSystemMetricsForDpi(i, dpi))
+        except Exception:
+            metric = lambda i: int(_user32.GetSystemMetrics(i))
+        if window.DisplayHorizontalScrollBar or window.DisplayWorkbookTabs:
+            hi.y -= metric(3)                            # SM_CYHSCROLL: the tabs / scroll bar row
+        if window.DisplayVerticalScrollBar:
+            hi.x -= metric(2)                            # SM_CXVSCROLL
+        return max(x0, lo.x), max(y0, lo.y), min(x1, hi.x), min(y1, hi.y)
+    except Exception:
+        return None
+
+
+def _clip_region(clip, rect):
+    """ The part of a window at rect (x, y, w, h) inside clip (x0, y0, x1, y1), in the window's own
+        coordinates (l, t, r, b); None when the window is wholly inside """
+    x, y, w, h = rect
+    l, t = max(0, clip[0] - x), max(0, clip[1] - y)
+    r, b = min(w, clip[2] - x), min(h, clip[3] - y)
+    if l <= 0 and t <= 0 and r >= w and b >= h:
+        return None
+    if r <= l or b <= t:
+        return (0, 0, 0, 0)
+    return (l, t, r, b)
+
+
+def _set_region(hwnd, clip):
+    """ Clips a window to (l, t, r, b), or unclips it (None). Call on the window's own thread. """
+    rgn = ctypes.windll.gdi32.CreateRectRgn(*clip) if clip is not None else None
+    _user32.SetWindowRgn(wt.HWND(hwnd), rgn, True)       # the system owns the region from here
+
+
 def _resolve_sheet(sheet):
     """ Returns a COM Worksheet from None / name / '[Book]Sheet' / xloil or COM worksheet """
     app = xloil_core.app()
@@ -174,6 +225,7 @@ class SheetControl:
         self.name = name or f"xloCtrl{next(_counter)}"
         self._key = f"[{self._workbook_name}]{self._sheet_name}!{self.name}"
         self._last_rect = None
+        self._clip = self._last_clip = None
         self._visible = False
         self._destroyed = False
 
@@ -188,13 +240,26 @@ class SheetControl:
         executor = self._toolkit.executor()
         self._widget = executor.submit(self._toolkit.create, widget).result()
         executor.submit(self._toolkit.prepare_for_sheet, self._widget).result()
-        self._hwnd, self._as_parent = executor.submit(self._toolkit.get_hwnd, self._widget).result()
-        self._hwnd = int(self._hwnd)
 
         self._window = self._find_window()
         self._xlmain = int(self._window.Hwnd)
         self._grid = find_grid_window(self._xlmain)
-        self._attach()
+
+        # The toolkit embeds the widget itself where it can (Qt): it then knows its window is a child of the
+        # grid, and xlOil moves it through the toolkit. Otherwise xlOil re-parents the window with Win32.
+        hwnd = None
+        try:
+            hwnd = executor.submit(self._toolkit.embed, self._widget, self._grid).result()
+        except Exception:
+            log_except(f"SheetControl '{self.name}': embedding through the toolkit failed, re-parenting instead")
+        self._embedded = bool(hwnd)
+        if self._embedded:
+            self._hwnd, self._as_parent = int(hwnd), True
+            self._previous_style, self._previous_parent = None, None
+        else:
+            self._hwnd, self._as_parent = executor.submit(self._toolkit.get_hwnd, self._widget).result()
+            self._hwnd = int(self._hwnd)
+            self._attach()
 
         with _lock:
             _CONTROLS[self._key] = self
@@ -339,10 +404,15 @@ class SheetControl:
         width = max(1, int(pane.PointsToScreenPixelsX(right)) - x0)
         height = max(1, int(pane.PointsToScreenPixelsY(bottom)) - y0)
 
+        clip = _pane_area(window, pane, self._grid)
         if self._as_parent:
             pt = wt.POINT(x0, y0)
             _user32.ScreenToClient(self._grid, ctypes.byref(pt))
+            dx, dy = pt.x - x0, pt.y - y0
             x0, y0 = pt.x, pt.y
+            if clip is not None:
+                clip = (clip[0] + dx, clip[1] + dy, clip[2] + dx, clip[3] + dy)
+        self._clip = None if clip is None else _clip_region(clip, (x0, y0, width, height))
         return x0, y0, width, height
 
     def update_position(self):
@@ -363,6 +433,22 @@ class SheetControl:
                 log.debug(f"SheetControl '{self.name}' position update skipped: {e}")
             return
 
+        if self._embedded:                               # moved by its toolkit, on the toolkit's thread
+            executor = self._toolkit.executor()
+            if rect is None:
+                if self._visible:
+                    executor.submit(self._toolkit.set_visible, self._widget, False)
+                    self._visible = False
+                return
+            if rect != self._last_rect or not self._visible:
+                executor.submit(self._toolkit.place, self._widget, *rect)
+                self._last_rect = rect
+                self._visible = True
+            if self._clip != self._last_clip:            # on the window's own thread: no cross-thread send
+                executor.submit(_set_region, self._hwnd, self._clip)
+                self._last_clip = self._clip
+            return
+
         if rect is None:
             if self._visible:
                 _user32.ShowWindowAsync(self._hwnd, SW_HIDE)
@@ -376,6 +462,9 @@ class SheetControl:
             _user32.SetWindowPos(self._hwnd, HWND_TOP, rect[0], rect[1], rect[2], rect[3], flags)
             self._last_rect = rect
             self._visible = True
+        if self._as_parent and self._clip != self._last_clip:
+            self._toolkit.executor().submit(_set_region, self._hwnd, self._clip)
+            self._last_clip = self._clip
 
     def _shape_exists(self) -> bool:
         try:
@@ -391,6 +480,17 @@ class SheetControl:
             return
         self._destroyed = True
         hwnd = self._hwnd
+        if getattr(self, "_embedded", False):
+            try:
+                from . import wait_pumping
+                wait_pumping(self._toolkit.executor().submit(self._toolkit.detach, self._widget), 5)
+            except Exception:
+                log_except(f"SheetControl '{self.name}': error detaching widget")
+            try:
+                self._toolkit.executor().submit(self._toolkit.destroy, self._widget)
+            except Exception:
+                log_except(f"SheetControl '{self.name}': error destroying widget")
+            return
         try:
             if _user32.IsWindow(hwnd):
                 _user32.ShowWindowAsync(hwnd, SW_HIDE)
@@ -488,8 +588,14 @@ def _on_workbook_before_close(wb_name, cancel):
                     if c._xlmain in hwnds or c.workbook == wb_name]
     for c in controls:
         try:
+            if getattr(c, "_embedded", False):
+                # Its toolkit takes it out of the grid (Qt must know: a window moved behind its
+                # back left Qt unable to quit, and Excel hung on close)
+                from . import wait_pumping
+                wait_pumping(c._toolkit.executor().submit(c._toolkit.detach, c._widget), 5)
+                c._as_parent_detached = True
             # Reparent to desktop so Excel's window teardown doesn't destroy it
-            if c._as_parent and _user32.IsWindow(c.hwnd):
+            elif c._as_parent and _user32.IsWindow(c.hwnd):
                 _user32.ShowWindowAsync(c.hwnd, SW_HIDE)
                 _user32.SetParent(c.hwnd, None)
                 c._as_parent_detached = True
@@ -503,9 +609,13 @@ def _on_workbook_before_close(wb_name, cancel):
             still_open = False
         for c in controls:
             if still_open and getattr(c, "_as_parent_detached", False):
-                _user32.SetParent(c.hwnd, c._grid)
+                if getattr(c, "_embedded", False):
+                    c._toolkit.executor().submit(c._toolkit.embed, c._widget, c._grid)
+                    c._visible = False
+                else:
+                    _user32.SetParent(c.hwnd, c._grid)
                 c._as_parent_detached = False
-                c._last_rect = None
+                c._last_rect = c._last_clip = None
             elif not still_open:
                 c._shape = None
                 c.delete(remove_shape=False)

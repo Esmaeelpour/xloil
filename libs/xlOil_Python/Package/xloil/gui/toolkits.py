@@ -84,6 +84,29 @@ class GuiToolkit:
         """ Optional hook: called before a widget is placed on a worksheet """
         pass
 
+    def embed(self, widget, parent_hwnd: int) -> Optional[int]:
+        """
+            Optional: make the widget a child of the native window `parent_hwnd` (the
+            Excel grid) through the toolkit itself, and return its window handle.
+            Return None to have xlOil re-parent the window with Win32 instead (the
+            toolkit then does not know it was moved, which some toolkits tolerate).
+            When this returns a handle, xlOil positions the widget with `place` and
+            shows or hides it with `set_visible`, on the toolkit's thread.
+        """
+        return None
+
+    def place(self, widget, x: int, y: int, width: int, height: int):
+        """ Moves an embedded widget: physical pixels relative to its parent window """
+        pass
+
+    def set_visible(self, widget, visible: bool):
+        """ Shows or hides an embedded widget """
+        pass
+
+    def detach(self, widget):
+        """ Undoes `embed` before the widget is destroyed """
+        pass
+
     def destroy(self, widget):
         """ Releases the widget """
         pass
@@ -192,6 +215,57 @@ class QtToolkit(GuiToolkit):
         widget.setWindowFlags(Qt.FramelessWindowHint)
         widget.show()
         return int(widget.winId()), True
+
+    def embed(self, widget, parent_hwnd):
+        """
+            Qt makes the widget a child of the Excel grid itself (`QWindow.fromWinId`),
+            so Qt knows where its window is. Re-parenting a Qt top-level window with
+            Win32 behind Qt's back left it at Qt's default size and place (640 x 480,
+            away from its placeholder) and a Qt WebEngine view in it painted black
+            (2026-11-17). Set XLOIL_SHEET_CONTROL_REPARENT=win32 for the old way.
+        """
+        import os
+        if os.environ.get("XLOIL_SHEET_CONTROL_REPARENT", "").lower() == "win32":
+            return None
+        from qtpy.QtCore import Qt
+        from qtpy.QtGui import QWindow
+        foreign = QWindow.fromWinId(int(parent_hwnd))
+        if foreign is None:
+            return None
+        widget.setWindowFlags(Qt.FramelessWindowHint)
+        widget.setAttribute(Qt.WA_NativeWindow, True)
+        widget.winId()                                   # create the native window (not shown yet)
+        handle = widget.windowHandle()
+        if handle is None:
+            return None
+        handle.setParent(foreign)
+        widget._xlo_foreign_parent = foreign             # keep the wrapper alive as long as the widget
+        return int(widget.winId())
+
+    @staticmethod
+    def _ratio(widget):
+        handle = widget.windowHandle()
+        try:
+            r = float(handle.devicePixelRatio()) if handle is not None else float(widget.devicePixelRatioF())
+        except Exception:
+            r = 1.0
+        return r if r > 0 else 1.0
+
+    def place(self, widget, x, y, width, height):
+        r = self._ratio(widget)                          # Excel gives physical pixels, Qt wants device-independent ones
+        widget.setGeometry(int(round(x / r)), int(round(y / r)), max(1, int(round(width / r))),
+                           max(1, int(round(height / r))))
+        if not widget.isVisible():
+            widget.show()
+
+    def set_visible(self, widget, visible):
+        widget.setVisible(bool(visible))
+
+    def detach(self, widget):
+        handle = widget.windowHandle()
+        if handle is not None:
+            widget.hide()
+            handle.setParent(None)                       # Qt aborts if Excel destroys its window first
 
     def destroy(self, widget):
         widget.close()
