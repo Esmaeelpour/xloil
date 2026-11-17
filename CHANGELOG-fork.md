@@ -4,10 +4,12 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
-## 0.22.1.post26
+## 0.22.1.post27
 
 Sheet controls and interactive charts inside the grid, tested in real Excel (Qt 6 / PySide6, Python 3.10). Python
-only: the post25 binaries are reused.
+only: the post25 binaries are reused. (post26 was tagged but not released: its Python test file under
+`libs/xlOil_Python/tests_py` counted as a native source and CI started a fresh compile; `tools/native_hash.py` now
+leaves that folder out.)
 
 - Fixed: a WebEngine view whose page is a local file could not load anything from http(s) (a chart's CDN scripts,
   a page served on 127.0.0.1): Qt 6 blocks that by default and the view showed `ERR_NETWORK_ACCESS_DENIED`.

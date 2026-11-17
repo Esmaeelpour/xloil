@@ -19,7 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 NATIVE_PATHS = ["src", "include", "external", "libs", "xlOil.sln"]
-EXCLUDE_PREFIXES = ("libs/xlOil_Python/Package/",)
+EXCLUDE_PREFIXES = ("libs/xlOil_Python/Package/", "libs/xlOil_Python/tests_py/")   # Python only
 
 
 def native_hash(revision: str = "HEAD") -> str:
