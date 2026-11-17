@@ -58,6 +58,12 @@ def _prepare_webengine():
     if not _webengine_installed():
         log.debug("Qt WebEngine not installed: interactive charts unavailable")
         return
+    # Inside Excel a WebEngine view painted black (2026-11-17): Chromium's GPU compositing inside a window Excel
+    # owns. Software drawing is plenty for charts and sketches. XLOIL_WEBENGINE_GPU=1 keeps the GPU; flags already
+    # set in QTWEBENGINE_CHROMIUM_FLAGS are kept as they are.
+    if not os.environ.get("XLOIL_WEBENGINE_GPU") and "QTWEBENGINE_CHROMIUM_FLAGS" not in os.environ:
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu --disable-gpu-compositing"
+        log.debug("Qt WebEngine: GPU off (set XLOIL_WEBENGINE_GPU=1 to keep it)")
     try:
         from qtpy.QtCore import Qt, QCoreApplication
         QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)

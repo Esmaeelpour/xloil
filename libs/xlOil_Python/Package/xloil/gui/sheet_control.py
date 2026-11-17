@@ -188,13 +188,26 @@ class SheetControl:
         executor = self._toolkit.executor()
         self._widget = executor.submit(self._toolkit.create, widget).result()
         executor.submit(self._toolkit.prepare_for_sheet, self._widget).result()
-        self._hwnd, self._as_parent = executor.submit(self._toolkit.get_hwnd, self._widget).result()
-        self._hwnd = int(self._hwnd)
 
         self._window = self._find_window()
         self._xlmain = int(self._window.Hwnd)
         self._grid = find_grid_window(self._xlmain)
-        self._attach()
+
+        # The toolkit embeds the widget itself where it can (Qt): it then knows its window is a child of the
+        # grid, and xlOil moves it through the toolkit. Otherwise xlOil re-parents the window with Win32.
+        hwnd = None
+        try:
+            hwnd = executor.submit(self._toolkit.embed, self._widget, self._grid).result()
+        except Exception:
+            log_except(f"SheetControl '{self.name}': embedding through the toolkit failed, re-parenting instead")
+        self._embedded = bool(hwnd)
+        if self._embedded:
+            self._hwnd, self._as_parent = int(hwnd), True
+            self._previous_style, self._previous_parent = None, None
+        else:
+            self._hwnd, self._as_parent = executor.submit(self._toolkit.get_hwnd, self._widget).result()
+            self._hwnd = int(self._hwnd)
+            self._attach()
 
         with _lock:
             _CONTROLS[self._key] = self
@@ -363,6 +376,19 @@ class SheetControl:
                 log.debug(f"SheetControl '{self.name}' position update skipped: {e}")
             return
 
+        if self._embedded:                               # moved by its toolkit, on the toolkit's thread
+            executor = self._toolkit.executor()
+            if rect is None:
+                if self._visible:
+                    executor.submit(self._toolkit.set_visible, self._widget, False)
+                    self._visible = False
+                return
+            if rect != self._last_rect or not self._visible:
+                executor.submit(self._toolkit.place, self._widget, *rect)
+                self._last_rect = rect
+                self._visible = True
+            return
+
         if rect is None:
             if self._visible:
                 _user32.ShowWindowAsync(self._hwnd, SW_HIDE)
@@ -391,6 +417,16 @@ class SheetControl:
             return
         self._destroyed = True
         hwnd = self._hwnd
+        if getattr(self, "_embedded", False):
+            try:
+                self._toolkit.executor().submit(self._toolkit.detach, self._widget).result(timeout=5)
+            except Exception:
+                log_except(f"SheetControl '{self.name}': error detaching widget")
+            try:
+                self._toolkit.executor().submit(self._toolkit.destroy, self._widget)
+            except Exception:
+                log_except(f"SheetControl '{self.name}': error destroying widget")
+            return
         try:
             if _user32.IsWindow(hwnd):
                 _user32.ShowWindowAsync(hwnd, SW_HIDE)

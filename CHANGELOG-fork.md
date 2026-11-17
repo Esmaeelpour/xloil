@@ -4,6 +4,18 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## Unreleased
+
+- Fixed: a Qt sheet control (and the interactive charts of `xloil.plotting`, a Qt WebEngine view) appeared at Qt's
+  default size and place (640 x 480, away from its placeholder) and a WebEngine view in it painted black. The widget
+  was shown as a top-level window and re-parented into the Excel grid with Win32 behind Qt's back. Qt now makes it a
+  child of the grid itself (`QWindow.fromWinId`) and positions it through Qt, in device-independent pixels (display
+  scaling). New `GuiToolkit` hooks `embed`, `place`, `set_visible`, `detach`; toolkits without them (Tk, wx, raw
+  HWND) keep the Win32 way. `XLOIL_SHEET_CONTROL_REPARENT=win32` restores the old way for Qt.
+- Changed: Qt WebEngine runs with `--disable-gpu --disable-gpu-compositing` inside Excel unless
+  `QTWEBENGINE_CHROMIUM_FLAGS` is set or `XLOIL_WEBENGINE_GPU=1`.
+- Test: `libs/xlOil_Python/tests_py/test_sheet_control_embed.py` (stub mode, no Excel).
+
 ## 0.22.1.post25
 
 - Fixed (root cause of the post24 crash): `Range.special_cells` released the GIL for the COM call and then built
