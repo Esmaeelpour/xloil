@@ -8,6 +8,48 @@ import typing
 import threading
 import inspect
 import sys
+import time
+
+_SHUTDOWN_WAIT = 10     # seconds Excel waits for a GUI thread when it closes
+
+
+def _join_pumping(thread, timeout) -> bool:
+    """
+        Joins `thread`, delivering messages other threads send to this one meanwhile. While
+        Excel's thread waited in a plain join, a Qt thread tearing down a window embedded in
+        Excel's grid sent it a message and both waited for ever (Excel hung on quit). Returns
+        False if the thread is still running after `timeout` seconds.
+    """
+    peek = None
+    if sys.platform == "win32":
+        import ctypes
+        import ctypes.wintypes
+        msg = ctypes.wintypes.MSG()
+        user32 = ctypes.windll.user32
+        peek = lambda: user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 0)  # PM_NOREMOVE: runs sent messages
+    deadline = time.monotonic() + timeout
+    while thread.is_alive() and time.monotonic() < deadline:
+        thread.join(0.05)
+        if peek is not None:
+            peek()
+    return not thread.is_alive()
+
+
+def wait_pumping(future, timeout):
+    """
+        `future.result(timeout)` for a call on a GUI thread, delivering messages other threads send
+        to this one meanwhile (see _join_pumping): a GUI thread moving a window that is a child of
+        Excel's grid can send Excel's thread a message and wait for it.
+    """
+    class _Waiter:
+        def __init__(self):
+            self._done = future.done
+        def is_alive(self):
+            return not self._done()
+        def join(self, t):
+            futures.wait([future], timeout=t)
+    _join_pumping(_Waiter(), timeout)
+    return future.result(timeout=0)
 
 _TASK_PANES = set()
 
@@ -323,11 +365,22 @@ class _GuiExecutor(futures.Executor):
         return await asyncio.wrap_future(self.submit(fn, *args, **kwargs))
 
     def shutdown(self, wait=True, cancel_futures=False):
+        # Controls in the sheet go first: a GUI thread told to quit while its window was still a
+        # child of Excel's grid never finished, and Excel hung on quit
+        controls = sys.modules.get("xloil.gui.sheet_control")
+        if controls is not None:
+            try:
+                controls._on_bye()
+            except Exception:
+                pass
         if self._ready.result(): # TODO: implement cancel_futures?
             self.submit(self._shutdown)
         if wait:
-            self._thread.join()
-            xloil.log.debug("Joined GUI thread '%s'", self._thread.name)
+            if _join_pumping(self._thread, _SHUTDOWN_WAIT):
+                xloil.log.debug("Joined GUI thread '%s'", self._thread.name)
+            else:
+                xloil.log.warning("GUI thread '%s' did not finish within %d s; Excel closes without it",
+                                  self._thread.name, _SHUTDOWN_WAIT)
             self._thread = None
 
     def _main_loop(self):

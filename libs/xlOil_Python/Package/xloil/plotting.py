@@ -123,8 +123,23 @@ class _WebViewFactory:
         from qtpy.QtWebEngineWidgets import QWebEngineView
         from qtpy.QtCore import QUrl
         view = QWebEngineView()
+        _allow_remote(view)
         view.load(QUrl.fromLocalFile(str(self.path)))
         return view
+
+
+def _allow_remote(view):
+    """ The chart page is a local file; let it load scripts and pages from http(s) (a CDN, or a local server
+        on 127.0.0.1). Qt 6 WebEngine blocks that by default and the view shows ERR_NETWORK_ACCESS_DENIED. """
+    try:
+        try:
+            from qtpy.QtWebEngineCore import QWebEngineSettings
+        except ImportError:
+            from qtpy.QtWebEngineWidgets import QWebEngineSettings
+        attrs = getattr(QWebEngineSettings, "WebAttribute", QWebEngineSettings)
+        view.settings().setAttribute(attrs.LocalContentCanAccessRemoteUrls, True)
+    except Exception:
+        pass
 
 
 def _reload_view(view, path):

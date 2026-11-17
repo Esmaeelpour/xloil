@@ -4,8 +4,24 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
-## Unreleased
+## 0.22.1.post26
 
+Sheet controls and interactive charts inside the grid, tested in real Excel (Qt 6 / PySide6, Python 3.10). Python
+only: the post25 binaries are reused.
+
+- Fixed: a WebEngine view whose page is a local file could not load anything from http(s) (a chart's CDN scripts,
+  a page served on 127.0.0.1): Qt 6 blocks that by default and the view showed `ERR_NETWORK_ACCESS_DENIED`.
+  `xloil.plotting` views now allow it (`LocalContentCanAccessRemoteUrls`).
+- Fixed: a sheet control covered the frozen rows and columns when the sheet was scrolled, and could cover the sheet
+  tabs and scroll bars. It is now clipped to the cells the scrolling pane shows.
+- Fixed: Excel hung on quit after showing an embedded Qt view. Excel's Bye event shut the Qt thread down before the
+  sheet controls were released, so Qt was asked to quit with its window still inside Excel's grid. The controls are
+  now released first, through their toolkit; the Qt thread is waited for while Excel's thread keeps delivering sent
+  messages, and for 10 s at most. On workbook close an embedded view leaves the grid through its toolkit (it was
+  re-parented with Win32 from Excel's thread).
+- Changed: with `QT_API` unset, if the Qt binding qtpy would pick (e.g. PyQt5) has no Qt WebEngine and another
+  installed binding (e.g. PySide6) has it, xlOil uses the one with WebEngine, so interactive views work. The check
+  only looks at files: importing a binding before xlOil's DLL set-up broke its later import.
 - Fixed: a Qt sheet control (and the interactive charts of `xloil.plotting`, a Qt WebEngine view) appeared at Qt's
   default size and place (640 x 480, away from its placeholder) and a WebEngine view in it painted black. The widget
   was shown as a top-level window and re-parented into the Excel grid with Win32 behind Qt's back. Qt now makes it a

@@ -154,5 +154,104 @@ check('deleted: detached from Excel before it is destroyed', kit.calls[-2:] == [
 kit2 = Kit(embeds=False)
 c2 = S.SheetControl('w', sheet=Sheet(), at='B2', size=(300, 200), name='xloPlot_u', toolkit=kit2)
 check('a toolkit that does not embed: the Win32 way as before', 'get_hwnd' in kit2.calls and c2.hwnd == 777, str(kit2.calls))
+
+# ---- clipped to the scrolling pane (frozen rows, sheet tabs, scroll bars) --------------------------------------------
+check('clip: wholly inside -> no region', S._clip_region((0, 0, 999, 999), (50, 50, 200, 200)) is None)
+check('clip: top cut by frozen rows', S._clip_region((0, 100, 999, 999), (50, 50, 200, 200)) == (0, 50, 200, 200))
+check('clip: scrolled out of the pane -> empty region', S._clip_region((0, 0, 10, 10), (50, 50, 200, 200)) == (0, 0, 0, 0))
+
+
+class VPane(Pane):                                 # the cells the pane shows start at 30 pt (frozen rows above)
+    VisibleRange = types.SimpleNamespace(Left=0.0, Top=30.0, Width=600.0, Height=300.0)   # last row partly hidden
+
+
+win = types.SimpleNamespace(DisplayHorizontalScrollBar=True, DisplayWorkbookTabs=True, DisplayVerticalScrollBar=True)
+rect = types.SimpleNamespace(left=0, top=0, right=700, bottom=300)
+u32 = S._user32
+S._user32 = types.SimpleNamespace(GetClientRect=lambda g, r: r.__dict__.update(rect.__dict__),
+                                  ClientToScreen=lambda g, p: p.__dict__.update(x=p.x + 100, y=p.y + 50),
+                                  GetDpiForWindow=lambda g: 144, GetSystemMetricsForDpi=lambda i, dpi: 25)
+S.wt.RECT = lambda: types.SimpleNamespace(left=0, top=0, right=0, bottom=0)
+area = S._pane_area(win, VPane(), 4242)
+check('pane area: from the first scrolling row to above the tabs / left of the scroll bar',
+      area == (100, 95, 775, 325), str(area))
+S._user32 = u32
+
+regions = []
+S._set_region = lambda hwnd, clip: regions.append((hwnd, clip))
+S._pane_area = lambda window, pane, grid: (100, 150, 2000, 2000)       # frozen rows end at y 150
+kit3 = Kit(embeds=True)
+c3 = S.SheetControl('w', sheet=Sheet(), at='B2', size=(300, 200), name='xloPlot_v', toolkit=kit3)
+check('embedded view clipped to the pane on its toolkit thread (placed at y 80, pane starts at 150)',
+      regions and regions[-1] == (555, (0, 70, 450, 300)), str(regions))
+n = len(regions)
+c3.update_position()
+check('region not set again while nothing moved', len(regions) == n, str(regions[n:]))
+S._pane_area = lambda window, pane, grid: (0, 0, 5000, 5000)
+c3.update_position()
+check('region removed when the view is wholly inside the pane', regions[-1] == (555, None), str(regions[-1:]))
+
+# ---- Excel's quit: controls go before the GUI thread, and Excel never waits for ever ---------------------------------
+import threading
+import time
+import xloil.gui as G
+
+done = threading.Thread(target=lambda: None)
+done.start()
+check('join: a finished thread joins', G._join_pumping(done, 1.0))
+stop = threading.Event()
+stuck = threading.Thread(target=stop.wait, daemon=True)
+stuck.start()
+t0 = time.monotonic()
+check('join: a thread that never ends is left after the timeout', not G._join_pumping(stuck, 0.3)
+      and time.monotonic() - t0 < 2, f'{time.monotonic() - t0:.1f} s')
+stop.set()
+f = futures.Future()
+threading.Timer(0.1, lambda: f.set_result(7)).start()
+check('wait_pumping returns the result', G.wait_pumping(f, 2) == 7)
+
+order = []
+kit4 = Kit(embeds=True)
+kit4.calls = order
+S.SheetControl('w', sheet=Sheet(), at='B2', size=(300, 200), name='xloPlot_w', toolkit=kit4)
+del order[:]
+fake = types.SimpleNamespace(_ready=types.SimpleNamespace(result=lambda: True), _thread=done, _shutdown='quit',
+                             submit=lambda fn, *a: order.append(('submit', fn)))
+G._GuiExecutor.shutdown(fake)
+check('shutdown: sheet controls detached before the GUI thread is told to quit',
+      'detach' in order and order.index('detach') < order.index(('submit', 'quit')), str(order))
+
+# ---- the Qt binding with WebEngine is chosen when qtpy's first choice has none ---------------------------------------
+import ast
+import os
+import tempfile
+
+src = open(os.path.join(os.path.dirname(G.__file__), 'qtpy.py'), encoding='utf-8').read()
+fn = next(n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef) and n.name == '_choose_binding')
+ns = {'os': os, 'sys': types.SimpleNamespace(modules={}), 'log': types.SimpleNamespace(info=lambda m: None)}
+exec(compile(ast.Module([fn], []), 'qtpy.py', 'exec'), ns)
+root = tempfile.mkdtemp()
+for pkg, files in (('PyQt5', ['QtCore.pyd']), ('PySide6', ['QtCore.pyd', 'QtWebEngineWidgets.pyd'])):
+    os.makedirs(os.path.join(root, pkg))
+    for name in files:
+        open(os.path.join(root, pkg, name), 'w').close()
+import importlib.util as IU
+real_find = IU.find_spec
+IU.find_spec = lambda name: (types.SimpleNamespace(submodule_search_locations=[os.path.join(root, name)])
+                             if name in ('PyQt5', 'PySide6') else None)
+saved = os.environ.pop('QT_API', None)
+try:
+    ns['_choose_binding']()
+    check('binding: PySide6 (has WebEngine) over PyQt5 (has not)', os.environ.get('QT_API') == 'pyside6',
+          os.environ.get('QT_API'))
+    os.environ['QT_API'] = 'pyqt5'
+    ns['_choose_binding']()
+    check('binding: QT_API set by the user is kept', os.environ['QT_API'] == 'pyqt5')
+finally:
+    IU.find_spec = real_find
+    os.environ.pop('QT_API', None)
+    if saved is not None:
+        os.environ['QT_API'] = saved
+
 print('\nALL PASS' if not FAIL else f'\n{len(FAIL)} FAILED')
 sys.exit(1 if FAIL else 0)
