@@ -130,6 +130,41 @@ def _create_Qt_app():
 
     return app
 
+def _destroy_app(app):
+    """ Deletes the QApplication's C++ object now (PySide: shiboken; PyQt: sip), after its widgets and their
+        deferred deletes. Call on the Qt thread after its event loop has ended. """
+    if app is None:
+        return
+    try:
+        from qtpy.QtCore import QCoreApplication, QEvent
+        for widget in list(app.topLevelWidgets()):
+            try:
+                widget.close()
+                widget.deleteLater()
+            except Exception:
+                pass
+        deferred = getattr(QEvent, "DeferredDelete", None) or QEvent.Type.DeferredDelete
+        QCoreApplication.sendPostedEvents(None, deferred)
+        QCoreApplication.processEvents()
+    except Exception as e:
+        log.debug(f"Qt: deleting widgets at exit: {e}")
+    try:
+        import qtpy
+        api = qtpy.API_NAME.lower()
+        if api == "pyside2":
+            import shiboken2 as shiboken
+        elif api.startswith("pyside"):
+            import shiboken6 as shiboken
+        elif api == "pyqt6":
+            from PyQt6 import sip as shiboken
+        else:
+            from PyQt5 import sip as shiboken
+        shiboken.delete(app)
+        log.debug("Qt: QApplication deleted on the Qt thread")
+    except Exception as e:
+        log.debug(f"Qt: deleting the QApplication: {e}")
+
+
 class QtExecutor(_GuiExecutor):
 
     def __init__(self):
@@ -170,10 +205,13 @@ class QtExecutor(_GuiExecutor):
 
         log.debug("Qt: Finished running exec loop, finalising Application")
 
-        # Thread cleanup
+        # Thread cleanup: the QApplication (and Qt WebEngine with it) is destroyed here, on the thread that made it.
+        # Dropping the Python reference left the C++ object alive until the process ended, and Excel with Qt 6
+        # WebEngine loaded then crashed on exit in Qt6WebEngineCore.dll (2026-11-17)
         self._work_signal = None
-        del self._app
-        self._app = None
+        semaphore = None
+        app, self._app = self._app, None
+        _destroy_app(app)
 
     def _shutdown(self):
         """

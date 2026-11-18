@@ -4,6 +4,17 @@ Changes in [Esmaeelpour/xloil](https://github.com/Esmaeelpour/xloil) relative to
 upstream [cunnane/xloil](https://github.com/cunnane/xloil). Full documentation is in
 `docs/source/xlOil_Python/NewFeatures.rst` and the pages it links to.
 
+## 0.22.1.post29
+
+- Fixed: Excel crashed when it closed if Qt 6 WebEngine (PySide6) had been loaded, with or without a web view shown
+  (`Qt6WebEngineCore.dll`, 0xc0000005 / 0xc0000409), and Windows then restarted Excel. The Qt thread only dropped
+  its Python reference to the `QApplication`, so the C++ object lived until the process ended; Qt WebEngine shuts
+  down only from the `QApplication` destructor, so its shutdown ran during Excel's own exit, on Excel's thread. The
+  Qt thread now closes its widgets, runs their deferred deletes and deletes the `QApplication` itself (shiboken /
+  sip) when its event loop ends. Tested in real Excel: Qt 6 with and without an embedded web view, 7-9 s exits and
+  no crash in 4 runs (crashes in every comparison run without the fix); PyQt5 unchanged (no crash in 3 runs).
+  Python only: the post25 binaries are reused.
+
 ## 0.22.1.post28
 
 post27's changes without its Qt binding preference (post27 was built but not published).
